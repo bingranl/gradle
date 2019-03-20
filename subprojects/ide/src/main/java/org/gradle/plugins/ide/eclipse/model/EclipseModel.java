@@ -19,12 +19,16 @@ package org.gradle.plugins.ide.eclipse.model;
 import com.google.common.base.Preconditions;
 import groovy.lang.Closure;
 import org.gradle.api.Action;
+import org.gradle.api.Incubating;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.internal.xml.XmlTransformer;
 import org.gradle.plugins.ide.api.XmlFileContentMerger;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import static org.gradle.util.ConfigureUtil.configure;
@@ -66,6 +70,8 @@ public class EclipseModel {
     private EclipseJdt jdt;
 
     private EclipseWtp wtp;
+
+    private List<String> synchronizationTasks = new ArrayList<>();
 
     /**
      * Injects and returns an instance of {@link ObjectFactory}.
@@ -215,6 +221,31 @@ public class EclipseModel {
      */
     public void jdt(Action<? super EclipseJdt> action) {
         action.execute(getJdt());
+    }
+
+    /**
+     * The list of tasks to execute before the Eclipse synchronization starts.
+     *
+     *
+     *
+     * @return the tasks names
+     * @since 5.4
+     */
+    @Incubating
+    public List<String> getSynchronizationTasks() {
+        return this.synchronizationTasks;
+    }
+
+    /**
+     * Set tasks to be executed before the Eclipse synchronization.
+     *
+     * // TODO (donat) polish documentation.
+     *
+     * @since 5.4
+     */
+    @Incubating
+    public void synchronizationTasks(String... synchronizationTasks) {
+        this.synchronizationTasks.addAll(Arrays.asList(synchronizationTasks));
     }
 
     /**
