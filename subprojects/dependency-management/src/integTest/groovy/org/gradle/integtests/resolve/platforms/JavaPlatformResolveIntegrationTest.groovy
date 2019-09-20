@@ -16,10 +16,10 @@
 
 package org.gradle.integtests.resolve.platforms
 
+import org.gradle.api.JavaVersion
 import org.gradle.api.attributes.Category
 import org.gradle.api.attributes.Usage
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
-import org.gradle.integtests.fixtures.FeaturePreviewsFixture
 import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
 import spock.lang.Issue
 
@@ -229,8 +229,6 @@ class JavaPlatformResolveIntegrationTest extends AbstractHttpDependencyResolutio
         def foo10 = mavenHttpRepo.module("org", "foo", "1.0").withModuleMetadata().publish()
         def foo11 = mavenHttpRepo.module("org", "foo", "1.1").withModuleMetadata().publish()
 
-        FeaturePreviewsFixture.enableGradleMetadata(settingsFile)
-
         buildFile << """
             dependencies {
                 api enforcedPlatform("org:platform:1.0")
@@ -240,8 +238,11 @@ class JavaPlatformResolveIntegrationTest extends AbstractHttpDependencyResolutio
         checkConfiguration("compileClasspath")
 
         when:
+        platform.pom.expectGet()
         platform.moduleMetadata.expectGet()
+        foo11.pom.expectGet()
         foo11.moduleMetadata.expectGet()
+        foo10.pom.expectGet()
         foo10.moduleMetadata.expectGet()
         foo10.artifact.expectGet()
 
@@ -278,10 +279,10 @@ class JavaPlatformResolveIntegrationTest extends AbstractHttpDependencyResolutio
         when:
         buildFile << """
             dependencies {
-                api platform("org:platform") // no version, will select the "platform" component
                 constraints {
                    api "org:platform:1.0"
                 }
+                api platform("org:platform") // no version, will select the "platform" component
             }
         """
         checkConfiguration("compileClasspath")
@@ -306,6 +307,68 @@ class JavaPlatformResolveIntegrationTest extends AbstractHttpDependencyResolutio
                             'org.gradle.category': 'platform',
                             'org.gradle.status': 'release',
                     ])
+                }
+            }
+        }
+
+    }
+
+    @Issue("gradle/gradle#8312")
+    def "can resolve a platform with a constraint to determine the platform version via a transitive constraint"() {
+        def platform = mavenHttpRepo.module("org", "platform", "1.0")
+            .hasType("pom")
+            .allowAll()
+            .publish()
+
+        settingsFile << """
+            include 'sub'
+        """
+
+        when:
+        buildFile << """
+            dependencies {
+                api "org:platform" // no version, will select the "platform" component
+                api project(":sub")
+            }
+            project(":sub") {
+                apply plugin: 'java-library'
+                dependencies {
+                    constraints {
+                       api platform("org:platform:1.0")
+                    }
+                }
+            }
+        """
+        checkConfiguration("compileClasspath")
+
+        run ":checkDeps"
+
+        then:
+        resolve.expectGraph {
+            root(":", "org.test:test:1.9") {
+                edge("org:platform", "org:platform:1.0") {
+                    variant("platform-compile", [
+                        'org.gradle.usage': 'java-api',
+                        'org.gradle.category': 'platform',
+                        'org.gradle.status': 'release',
+                    ])
+                    byConstraint()
+                    noArtifacts()
+                }
+                project(":sub", "org.test:sub:1.9") {
+                    variant("apiElements", ['org.gradle.category':'library',
+                                            'org.gradle.dependency.bundling':'external',
+                                            'org.gradle.jvm.version': JavaVersion.current().majorVersion,
+                                            'org.gradle.usage':'java-api',
+                                            'org.gradle.libraryelements': 'jar'])
+                    constraint("org:platform:1.0", "org:platform:1.0") {
+                        variant("platform-compile", [
+                            'org.gradle.usage': 'java-api',
+                            'org.gradle.category': 'platform',
+                            'org.gradle.status': 'release',
+                        ])
+                    }
+                    artifact(name: 'main', noType: true)
                 }
             }
         }

@@ -38,9 +38,10 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
                 }
             
                 @InputArtifact
-                abstract File getInput()
+                abstract Provider<FileSystemLocation> getInputArtifact()
                 
                 void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     println "processing \${input.name} using \${parameters.someFiles*.name}"
                     def output = outputs.file(input.name + ".green")
                     def paramContent = parameters.someFiles.collect { it.file ? it.text : it.list().length }.join("")
@@ -114,6 +115,62 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
         outputContains("result = [b.jar.green, c.jar.green]")
     }
 
+    def "transform can receive a file input from a nested bean on the parameter object"() {
+        settingsFile << """
+            include 'a', 'b'
+        """
+        buildFile << """
+            allprojects {
+                task tool(type: FileProducer) {
+                    output = file("build/tool-\${project.name}.jar")
+                }
+            }
+        """
+        setupBuildWithColorTransform {
+            params("""
+                nestedBean.inputFiles.from(tasks.tool)
+            """)
+        }
+        buildFile << """
+            interface NestedInputFiles {
+                @InputFiles
+                ConfigurableFileCollection getInputFiles()
+            }
+
+            project(':a') {
+                dependencies {
+                    implementation project(':b')
+                }
+            }
+
+            abstract class MakeGreen implements TransformAction<Parameters> {
+                interface Parameters extends TransformParameters{
+                    @Nested
+                    NestedInputFiles getNestedBean()
+                }
+            
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+                
+                void transform(TransformOutputs outputs) {
+                    def inputFiles = parameters.nestedBean.inputFiles
+                    def input = inputArtifact.get().asFile
+                    println "processing \${input.name} using \${inputFiles*.name}"
+                    def output = outputs.file(input.name + ".green")
+                    def paramContent = inputFiles.collect { it.file ? it.text : it.list().length }.join("")
+                    output.text = input.text + paramContent + ".green"
+                }
+            }
+        """
+
+        when:
+        run(":a:resolve")
+
+        then:
+        outputContains("processing b.jar using [tool-a.jar]")
+        outputContains("result = [b.jar.green]")
+    }
+
     def "transform can receive a file collection containing task outputs as parameter"() {
         settingsFile << """
                 include 'a', 'b', 'c'
@@ -153,9 +210,10 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
         buildFile << """
             abstract class MakeRed implements TransformAction<TransformParameters.None> {
                 @InputArtifact
-                abstract File getInput()
+                abstract Provider<FileSystemLocation> getInputArtifact()
                 
                 void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     println "processing \${input.name} wit MakeRedAction"
                     def output = outputs.file(input.name + ".red")
                     output.text = "ok"
@@ -164,11 +222,17 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
 
             allprojects {
                 def attr = Attribute.of('color', String)
-                configurations.create("tools") {
+                def tools = configurations.create("tools") {
                     canBeConsumed = false
+                    canBeResolved = false
+                }
+                configurations.create("toolsPath") {
+                    extendsFrom(tools)
+                    canBeConsumed = false
+                    canBeResolved = true
                     attributes.attribute(attr, 'blue')
                 }
-                ext.inputFiles = configurations.tools.incoming.artifactView {
+                ext.inputFiles = configurations.toolsPath.incoming.artifactView {
                     attributes.attribute(attr, 'red')
                 }.files
                 dependencies {
@@ -216,7 +280,7 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
             
             class Producer extends DefaultTask {
                 @OutputFile
-                RegularFileProperty outputFile = project.objects.fileProperty()
+                final RegularFileProperty outputFile = project.objects.fileProperty()
             
                 @TaskAction
                 def go() {
@@ -270,7 +334,7 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
         """
         setupBuildWithColorTransform {
             params("""
-                someFile.set(project.inputFile)
+                someFile = project.inputFile
             """)
         }
         buildFile << """
@@ -288,9 +352,10 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
                 }
             
                 @InputArtifact
-                abstract File getInput()
+                abstract Provider<FileSystemLocation> getInputArtifact()
                 
                 void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     println "processing \${input.name} using \${parameters.someFile.get().asFile.name}"
                     def output = outputs.file(input.name + ".green")
                     output.text = input.text + parameters.someFile.get().asFile.text + ".green"
@@ -321,7 +386,7 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
         """
         setupBuildWithColorTransform {
             params("""
-                someDir.set(project.inputDir)
+                someDir = project.inputDir
             """)
         }
         buildFile << """
@@ -339,9 +404,10 @@ class ArtifactTransformWithFileInputsIntegrationTest extends AbstractDependencyR
                 }
             
                 @InputArtifact
-                abstract File getInput()
+                abstract Provider<FileSystemLocation> getInputArtifact()
                 
                 void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     println "processing \${input.name} using \${parameters.someDir.get().asFile.name}"
                     def output = outputs.file(input.name + ".green")
                     output.text = input.text + parameters.someDir.get().asFile.list().length + ".green"

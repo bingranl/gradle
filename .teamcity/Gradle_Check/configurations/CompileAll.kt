@@ -14,16 +14,14 @@ class CompileAll(model: CIBuildModel, stage: Stage) : BaseGradleBuildType(model,
         param("env.JAVA_HOME", buildJavaHome)
     }
 
-    if (model.publishStatusToGitHub) {
-        features {
-            publishBuildStatusToGithub()
-        }
+    features {
+        publishBuildStatusToGithub(model)
     }
 
     applyDefaults(
         model,
         this,
-        "compileAllBuild -PignoreIncomingBuildReceipt=true",
+        "compileAllBuild -PignoreIncomingBuildReceipt=true -DdisableLocalCache=true",
         extraParameters = buildScanTag("CompileAll")
     )
 

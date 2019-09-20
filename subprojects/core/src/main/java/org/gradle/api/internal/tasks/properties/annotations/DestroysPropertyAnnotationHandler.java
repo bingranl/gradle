@@ -16,19 +16,28 @@
 
 package org.gradle.api.internal.tasks.properties.annotations;
 
+import com.google.common.collect.ImmutableSet;
 import org.gradle.api.internal.tasks.properties.BeanPropertyContext;
 import org.gradle.api.internal.tasks.properties.PropertyValue;
 import org.gradle.api.internal.tasks.properties.PropertyVisitor;
 import org.gradle.api.tasks.Destroys;
-import org.gradle.internal.reflect.ParameterValidationContext;
+import org.gradle.internal.reflect.AnnotationCategory;
 import org.gradle.internal.reflect.PropertyMetadata;
+import org.gradle.internal.reflect.WorkValidationContext;
 
 import java.lang.annotation.Annotation;
+
+import static org.gradle.api.internal.tasks.properties.ModifierAnnotationCategory.OPTIONAL;
 
 public class DestroysPropertyAnnotationHandler implements PropertyAnnotationHandler {
     @Override
     public Class<? extends Annotation> getAnnotationType() {
         return Destroys.class;
+    }
+
+    @Override
+    public ImmutableSet<? extends AnnotationCategory> getAllowedModifiers() {
+        return ImmutableSet.of(OPTIONAL);
     }
 
     @Override
@@ -47,6 +56,6 @@ public class DestroysPropertyAnnotationHandler implements PropertyAnnotationHand
     }
 
     @Override
-    public void validatePropertyMetadata(PropertyMetadata propertyMetadata, ParameterValidationContext visitor) {
+    public void validatePropertyMetadata(PropertyMetadata propertyMetadata, WorkValidationContext visitor) {
     }
 }

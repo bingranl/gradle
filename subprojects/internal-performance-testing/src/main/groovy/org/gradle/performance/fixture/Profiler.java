@@ -25,7 +25,7 @@ public abstract class Profiler {
     private static final String TARGET_DIR_KEY = "org.gradle.performance.flameGraphTargetDir";
 
     public static Profiler create() {
-        String targetDir = System.getProperty(TARGET_DIR_KEY);
+        String targetDir = getJfrProfileTargetDir();
         if (targetDir != null && !Jvm.current().isIbmJvm()) {
             return new JfrProfiler(new File(targetDir));
         } else {
@@ -33,7 +33,23 @@ public abstract class Profiler {
         }
     }
 
+    public static String getJfrProfileTargetDir() {
+        return System.getProperty(TARGET_DIR_KEY);
+    }
+
     public abstract List<String> getAdditionalJvmOpts(BuildExperimentSpec spec);
+
+    /**
+     * The {@literal ;} separated list of jvm arguments to start a recording.
+     *
+     * This can be passed to the {@link org.gradle.performance.generator.JavaTestProject}s to enable recordings for the compiler daemon via:
+     * <pre>
+     * runner.args += ["-PjavaCompileJvmArgs=${Profiler.create().getJvmOptsForUseInBuild("compiler-daemon")}"]
+     * </pre>
+     * @param recordingsDirectoryRelativePath The directory where the profiler recordings will be generated.
+     *                                        Relative to the base path where all the recordings are stored.
+     */
+    public abstract String getJvmOptsForUseInBuild(String recordingsDirectoryRelativePath);
 
     public abstract List<String> getAdditionalGradleArgs(BuildExperimentSpec spec);
 

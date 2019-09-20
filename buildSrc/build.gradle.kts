@@ -22,7 +22,7 @@ import java.util.Properties
 plugins {
     `java`
     `kotlin-dsl` apply false
-    id("org.gradle.kotlin-dsl.ktlint-convention") version "0.3.0" apply false
+    id("org.gradle.kotlin-dsl.ktlint-convention") version "0.4.1" apply false
 }
 
 subprojects {
@@ -44,12 +44,12 @@ subprojects {
         }
 
         dependencies {
-            compile(gradleApi())
+            implementation(gradleApi())
         }
 
         afterEvaluate {
-            if (tasks.withType<ValidateTaskProperties>().isEmpty()) {
-                val validateTaskProperties by tasks.registering(ValidateTaskProperties::class) {
+            if (tasks.withType<ValidatePlugins>().isEmpty()) {
+                val validatePlugins by tasks.registering(ValidatePlugins::class) {
                     outputFile.set(project.reporting.baseDirectory.file("task-properties/report.txt"))
 
                     val mainSourceSet = project.sourceSets.main.get()
@@ -57,13 +57,13 @@ subprojects {
                     dependsOn(mainSourceSet.output)
                     classpath.setFrom(mainSourceSet.runtimeClasspath)
                 }
-                tasks.check { dependsOn(validateTaskProperties) }
+                tasks.check { dependsOn(validatePlugins) }
             }
         }
 
-        tasks.withType<ValidateTaskProperties> {
-            failOnWarning = true
-            enableStricterValidation = true
+        tasks.withType<ValidatePlugins> {
+            failOnWarning.set(true)
+            enableStricterValidation.set(true)
         }
 
         apply(from = "../../../gradle/shared-with-buildSrc/code-quality-configuration.gradle.kts")
@@ -73,14 +73,18 @@ subprojects {
 
 allprojects {
     repositories {
-        gradlePluginPortal()
         maven {
             name = "Gradle libs"
             url = uri("https://repo.gradle.org/gradle/libs")
         }
+        gradlePluginPortal()
         maven {
             name = "Gradle snapshot libs"
             url = uri("https://repo.gradle.org/gradle/libs-snapshots")
+        }
+        maven {
+            name = "kotlinx"
+            url = uri("https://dl.bintray.com/kotlin/kotlinx")
         }
         maven {
             name = "kotlin-eap"
@@ -91,12 +95,29 @@ allprojects {
 
 dependencies {
     subprojects.forEach {
-        runtime(project(it.path))
+        runtimeOnly(project(it.path))
     }
 }
 
-// Set gradlebuild.skipBuildSrcChecks Gradle property to "true" to disable all buildSrc verification tasks
-if (findProperty("gradlebuild.skipBuildSrcChecks") == "true") {
+
+// TODO Avoid duplication of what defines a CI Server with BuildEnvironment
+val isCiServer: Boolean by extra { "CI" in System.getenv() }
+
+
+/**
+ * Controls whether verification tasks are skipped.
+ *
+ * Set the `buildSrcCheck` Gradle property to `true` to run the verification tasks.
+ * Set it to `false` to skip the verification tasks.
+ *
+ * When that property is unset, defaults to `false` on CI, to `true` otherwise.
+ */
+val isSkipBuildSrcVerification: Boolean =
+    (findProperty("buildSrcCheck") as String?)
+        ?.let { it == "false" }
+        ?: !isCiServer
+
+if (isSkipBuildSrcVerification) {
     allprojects {
         tasks.matching { it.group == LifecycleBasePlugin.VERIFICATION_GROUP }.configureEach {
             enabled = false
@@ -104,8 +125,6 @@ if (findProperty("gradlebuild.skipBuildSrcChecks") == "true") {
     }
 }
 
-// TODO Avoid duplication of what defines a CI Server with BuildEnvironment
-val isCiServer: Boolean by extra { "CI" in System.getenv() }
 if (isCiServer) {
     gradle.buildFinished {
         allprojects.forEach { project ->
@@ -160,12 +179,12 @@ fun Project.applyGroovyProjectConventions() {
     apply(plugin = "groovy")
 
     dependencies {
-        compile(localGroovy())
-        testCompile("org.spockframework:spock-core:1.2-groovy-2.5") {
+        implementation(localGroovy())
+        testImplementation("org.spockframework:spock-core:1.3-groovy-2.5") {
             exclude(group = "org.codehaus.groovy")
         }
-        testCompile("net.bytebuddy:byte-buddy:1.8.21")
-        testCompile("org.objenesis:objenesis:2.6")
+        testImplementation("net.bytebuddy:byte-buddy:1.8.21")
+        testImplementation("org.objenesis:objenesis:2.6")
     }
 
     tasks.withType<GroovyCompile>().configureEach {
@@ -220,3 +239,4 @@ fun Project.applyKotlinProjectConventions() {
         }
     }
 }
+

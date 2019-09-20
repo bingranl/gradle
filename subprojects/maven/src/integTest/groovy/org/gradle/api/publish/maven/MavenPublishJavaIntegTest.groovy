@@ -18,7 +18,6 @@ package org.gradle.api.publish.maven
 
 import org.gradle.api.attributes.Category
 import org.gradle.api.publish.maven.internal.publication.DefaultMavenPublication
-import org.gradle.integtests.fixtures.FeaturePreviewsFixture
 import org.gradle.integtests.fixtures.publish.maven.AbstractMavenPublishIntegTest
 import org.gradle.test.fixtures.maven.MavenDependencyExclusion
 import org.gradle.test.fixtures.maven.MavenFileModule
@@ -113,20 +112,20 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
             ${mavenCentralRepository()}
 
             dependencies {
-                compile "commons-collections:commons-collections:3.2.2"
+                api "commons-collections:commons-collections:3.2.2"
                 compileOnly "javax.servlet:servlet-api:2.5"
-                runtime "commons-io:commons-io:1.4"
-                testCompile "junit:junit:4.12"
-                compile ("org.springframework:spring-core:2.5.6") {
+                runtimeOnly "commons-io:commons-io:1.4"
+                testImplementation "junit:junit:4.12"
+                api ("org.springframework:spring-core:2.5.6") {
                     exclude group: 'commons-logging', module: 'commons-logging'
                 }
-                compile ("commons-beanutils:commons-beanutils:1.8.3") {
+                api ("commons-beanutils:commons-beanutils:1.8.3") {
                    exclude group : 'commons-logging'
                 }
-                compile ("commons-dbcp:commons-dbcp:1.4") {
+                api ("commons-dbcp:commons-dbcp:1.4") {
                    transitive = false
                 }
-                compile ("org.apache.camel:camel-jackson:2.15.3") {
+                api ("org.apache.camel:camel-jackson:2.15.3") {
                    exclude module : 'camel-core'
                 }
             }
@@ -146,15 +145,17 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
         then:
         javaLibrary.assertPublished()
 
-        javaLibrary.parsedPom.scopes.keySet() == ["compile"] as Set
-        javaLibrary.parsedPom.scopes.compile.assertDependsOn("commons-collections:commons-collections:3.2.2", "commons-io:commons-io:1.4", "org.springframework:spring-core:2.5.6", "commons-beanutils:commons-beanutils:1.8.3", "commons-dbcp:commons-dbcp:1.4", "org.apache.camel:camel-jackson:2.15.3")
+        javaLibrary.parsedPom.scopes.keySet() == ["compile", "runtime"] as Set
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn("commons-collections:commons-collections:3.2.2", "org.springframework:spring-core:2.5.6", "commons-beanutils:commons-beanutils:1.8.3", "commons-dbcp:commons-dbcp:1.4", "org.apache.camel:camel-jackson:2.15.3")
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn("commons-io:commons-io:1.4")
         javaLibrary.parsedPom.scopes.compile.hasDependencyExclusion("org.springframework:spring-core:2.5.6", new MavenDependencyExclusion("commons-logging", "commons-logging"))
         javaLibrary.parsedPom.scopes.compile.hasDependencyExclusion("commons-beanutils:commons-beanutils:1.8.3", new MavenDependencyExclusion("commons-logging", "*"))
         javaLibrary.parsedPom.scopes.compile.hasDependencyExclusion("commons-dbcp:commons-dbcp:1.4", new MavenDependencyExclusion("*", "*"))
         javaLibrary.parsedPom.scopes.compile.hasDependencyExclusion("org.apache.camel:camel-jackson:2.15.3", new MavenDependencyExclusion("*", "camel-core"))
 
         and:
-        javaLibrary.assertApiDependencies("commons-collections:commons-collections:3.2.2", "commons-io:commons-io:1.4", "org.springframework:spring-core:2.5.6", "commons-beanutils:commons-beanutils:1.8.3", "commons-dbcp:commons-dbcp:1.4", "org.apache.camel:camel-jackson:2.15.3")
+        javaLibrary.assertApiDependencies("commons-collections:commons-collections:3.2.2", "org.springframework:spring-core:2.5.6", "commons-beanutils:commons-beanutils:1.8.3", "commons-dbcp:commons-dbcp:1.4", "org.apache.camel:camel-jackson:2.15.3")
+        javaLibrary.assertRuntimeDependencies("commons-io:commons-io:1.4")
         def apiVariant = javaLibrary.parsedModuleMetadata.variant("apiElements")
         apiVariant.dependencies.find { it.coords == 'org.springframework:spring-core:2.5.6' }.excludes == ['commons-logging:commons-logging']
         apiVariant.dependencies.find { it.coords == 'commons-beanutils:commons-beanutils:1.8.3' }.excludes == ['commons-logging:*']
@@ -454,7 +455,6 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
 
     @Unroll('can publish java-library with dependencies with maven incompatible version notation: #version')
     def "can publish java-library with dependencies with maven incompatible version notation: #version"() {
-        requiresExternalDependencies = true
 
         given:
         createBuildScripts("""
@@ -501,6 +501,55 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
         version << ['1.+', 'latest.milestone']
     }
 
+    def "can publish java-library without warning when dependency with maven incompatible version and using versionMapping"() {
+
+        given:
+        createBuildScripts("""
+
+            ${jcenterRepository()}
+
+            dependencies {
+                implementation "commons-collections:commons-collections:1.+"
+            }
+
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        versionMapping {
+                            allVariants {
+                                fromResolutionResult()
+                            }
+                        }
+                    }
+                }
+            }
+""")
+
+        when:
+        run "publish"
+
+        then:
+        outputDoesNotContain(DefaultMavenPublication.PUBLICATION_WARNING_FOOTER)
+        javaLibrary.assertPublished()
+
+        javaLibrary.parsedPom.scopes.keySet() == ["runtime"] as Set
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn("commons-collections:commons-collections:1.0")
+
+        and:
+        javaLibrary.parsedModuleMetadata.variant("apiElements") {
+            noMoreDependencies()
+        }
+
+        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
+            dependency("commons-collections:commons-collections:1.0") {
+                rejects()
+                noMoreExcludes()
+            }
+            noMoreDependencies()
+        }
+    }
+
     def "can publish java-library with attached artifacts"() {
         given:
         createBuildScripts("""
@@ -537,89 +586,11 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
         }
     }
 
-    def "can publish java-library-platform with dependencies and constraints"() {
-        given:
-        javaLibrary(mavenRepo.module("org.test", "foo", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata().publish()
-
-        createBuildScripts("""
-            dependencies {
-                api "org.test:bar"
-                implementation "org.test:foo:1.0"
-                
-                constraints {
-                    api "org.test:bar:1.0"
-                    implementation "org.test:bar:1.1"
-                }
-            }
-            publishing {
-                publications {
-                    maven(MavenPublication) {
-                        from components.javaLibraryPlatform
-                    }
-                }
-            }
-""")
-        executer.expectDeprecationWarning()
-
-        when:
-        run "publish"
-
-        then:
-        def mavenModule = javaLibrary.mavenModule
-        mavenModule.removeGradleMetadataRedirection()
-
-        mavenModule.assertPublished()
-        mavenModule.assertArtifactsPublished("publishTest-1.9.module", "publishTest-1.9.pom")
-
-        and:
-        javaLibrary.parsedModuleMetadata.variant('api') {
-            files.empty
-            dependency('org.test:bar:').exists()
-            constraint('org.test:bar:1.0').exists()
-            noMoreDependencies()
-        }
-
-        javaLibrary.parsedModuleMetadata.variant('runtime') {
-            files.empty
-            dependency('org.test:bar:').exists()
-            dependency('org.test:foo:1.0').exists()
-            constraint('org.test:bar:1.0').exists()
-            constraint('org.test:bar:1.1').exists()
-            noMoreDependencies()
-        }
-
-
-        // Published with pom packaging
-        assert javaLibrary.parsedPom.packaging == 'pom'
-        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:bar:')
-        javaLibrary.parsedPom.scopes.compile.assertDependencyManagement('org.test:bar:1.0')
-        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:foo:1.0')
-        javaLibrary.parsedPom.scopes.runtime.assertDependencyManagement('org.test:bar:1.1')
-
-        and:
-        resolveArtifacts(javaLibrary) {
-            expectFiles "bar-1.1.jar", "foo-1.0.jar"
-        }
-        resolveApiArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.0.jar"
-            }
-            withoutModuleMetadata {
-                // To allow this, we would need to support multiple dependency management entries with different scopes
-                // for the same module. This is not supported by Maven and an attempt to implement it in Gradle failed.
-                // See: https://github.com/gradle/gradle/issues/4202
-                expectFiles "bar-1.1.jar"
-            }
-        }
-        resolveRuntimeArtifacts(javaLibrary) {
-            expectFiles "bar-1.1.jar", "foo-1.0.jar"
-        }
-    }
-
     @Unroll("'#gradleConfiguration' dependencies end up in '#mavenScope' scope with '#plugin' plugin")
     void "maps dependencies in the correct Maven scope"() {
+        if (deprecatedConfiguration) {
+            executer.expectDeprecationWarning()
+        }
         given:
         file("settings.gradle") << '''
             rootProject.name = 'publishTest' 
@@ -668,22 +639,21 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
         }
 
         where:
-        plugin         | gradleConfiguration | mavenScope
-        'java'         | 'compile'           | 'compile'
-        'java'         | 'runtime'           | 'compile'
-        'java'         | 'implementation'    | 'runtime'
-        'java'         | 'runtimeOnly'       | 'runtime'
+        plugin         | gradleConfiguration | mavenScope | deprecatedConfiguration
+        'java'         | 'compile'           | 'compile'  | true
+        'java'         | 'runtime'           | 'compile'  | true
+        'java'         | 'implementation'    | 'runtime'  | false
+        'java'         | 'runtimeOnly'       | 'runtime'  | false
 
-        'java-library' | 'api'               | 'compile'
-        'java-library' | 'compile'           | 'compile'
-        'java-library' | 'runtime'           | 'compile'
-        'java-library' | 'runtimeOnly'       | 'runtime'
-        'java-library' | 'implementation'    | 'runtime'
+        'java-library' | 'api'               | 'compile'  | false
+        'java-library' | 'compile'           | 'compile'  | true
+        'java-library' | 'runtime'           | 'compile'  | true
+        'java-library' | 'runtimeOnly'       | 'runtime'  | false
+        'java-library' | 'implementation'    | 'runtime'  | false
 
     }
 
     def "can publish java-library with capabilities"() {
-        requiresExternalDependencies = true
         given:
         createBuildScripts("""
 
@@ -703,7 +673,6 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
         run "publish"
 
         then:
-        outputContains(DefaultMavenPublication.UNSUPPORTED_FEATURE)
         outputContains('Declares capability org:foo:1.0')
         javaLibrary.assertPublished()
 
@@ -718,6 +687,61 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
             capability('org', 'bar', '1.0')
             noMoreCapabilities()
         }
+    }
+
+    def "can ignore publication warnings"() {
+        given:
+        def silenceMethod = "suppressPomMetadataWarningsFor"
+        createBuildScripts("""
+
+            configurations.api.outgoing.capability 'org:foo:1.0'
+            configurations.implementation.outgoing.capability 'org:bar:1.0'
+
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        $silenceMethod('runtimeElements')
+                    }
+                }
+            }
+""")
+
+        when:
+        run "publish"
+
+        then:
+        outputContains(DefaultMavenPublication.PUBLICATION_WARNING_FOOTER)
+        outputContains("$silenceMethod(variant)")
+        outputContains('Declares capability org:foo:1.0')
+        outputContains("Variant apiElements")
+        outputDoesNotContain("Variant runtimeElements")
+        javaLibrary.assertPublished()
+    }
+
+    def "can ignore all publication warnings"() {
+        given:
+        createBuildScripts("""
+
+            configurations.api.outgoing.capability 'org:foo:1.0'
+            configurations.implementation.outgoing.capability 'org:bar:1.0'
+
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        suppressAllPomMetadataWarnings()
+                    }
+                }
+            }
+""")
+
+        when:
+        run "publish"
+
+        then:
+        outputDoesNotContain(DefaultMavenPublication.PUBLICATION_WARNING_FOOTER)
+        javaLibrary.assertPublished()
     }
 
     @Issue("https://github.com/gradle/gradle/issues/5034, https://github.com/gradle/gradle/issues/5035")
@@ -811,7 +835,6 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
     }
 
     def "can publish java-library with dependencies/constraints with attributes"() {
-        requiresExternalDependencies = true
         given:
         settingsFile << "include 'utils'\n"
         file("utils/build.gradle") << '''
@@ -1166,9 +1189,7 @@ include(':platform')
     }
 
     @Unroll
-    def "publishes Gradle metadata redirection marker when Gradle metadata task is enabled (preview=#enableFeaturePreview, enabled=#enabled)"() {
-        publishModuleMetadata = enableFeaturePreview
-
+    def "publishes Gradle metadata redirection marker when Gradle metadata task is enabled (enabled=#enabled)"() {
         given:
         createBuildScripts("""
             publishing {
@@ -1185,9 +1206,6 @@ include(':platform')
             generateMetadataFileForMavenPublication.enabled = $enabled
         """)
         settingsFile.text = "rootProject.name = 'publishTest' "
-        if (enableFeaturePreview) {
-            FeaturePreviewsFixture.enableGradleMetadata(settingsFile)
-        }
 
         when:
         succeeds 'publish'
@@ -1197,11 +1215,79 @@ include(':platform')
         module.hasGradleMetadataRedirectionMarker() == hasMarker
 
         where:
-        enableFeaturePreview | enabled | hasMarker
-        false                | false   | false
-        false                | true    | false
-        true                 | false   | false
-        true                 | true    | true
+        enabled | hasMarker
+        false   | false
+        true    | true
     }
 
+    def "a component's variant can be modified before publishing"() {
+        given:
+        createBuildScripts """
+            dependencies {
+                api 'org:foo:1.0'
+                implementation 'org:bar:1.0'
+            }
+            components.java.withVariantsFromConfiguration(configurations.runtimeElements) {
+                skip()
+            }
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                    }
+                }
+            }
+        """
+
+        when:
+        succeeds "publish"
+
+        then:
+        with(javaLibrary.parsedPom) {
+            assert scopes.size() == 1
+            scopes['compile'].expectDependency('org:foo:1.0')
+        }
+        with(javaLibrary.parsedModuleMetadata) {
+            assert variants.collect { it.name } == ["apiElements"]
+            assert variants[0].dependencies.collect { it.toString() } == ["org:foo:1.0"]
+        }
+    }
+
+    def "fails when attempting to modify a published variant that does not exist"() {
+        given:
+        createBuildScripts """
+            components.java.withVariantsFromConfiguration(configurations.annotationProcessor) {
+                skip()
+            }
+        """
+
+        when:
+        fails "publish"
+
+        then:
+        failure.assertHasCause("Variant for configuration annotationProcessor does not exist in component java")
+    }
+
+    def "fails if trying to publish a component with all variants filtered"() {
+        createBuildScripts("""
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java                        
+                    }
+                }
+            }            
+            configurations {
+                components.java.withVariantsFromConfiguration(apiElements) { skip() }
+                components.java.withVariantsFromConfiguration(runtimeElements) { skip() }                
+            }
+""")
+
+        when:
+        fails "publish"
+
+        then:
+        failure.assertHasCause("""Invalid publication 'maven':
+  - This publication must publish at least one variant""")
+    }
 }

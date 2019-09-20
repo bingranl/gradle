@@ -15,18 +15,28 @@
  */
 package org.gradle.api.internal.tasks.properties.annotations;
 
+import com.google.common.collect.ImmutableSet;
 import org.gradle.api.internal.tasks.properties.BeanPropertyContext;
 import org.gradle.api.internal.tasks.properties.PropertyValue;
 import org.gradle.api.internal.tasks.properties.PropertyVisitor;
 import org.gradle.api.tasks.LocalState;
-import org.gradle.internal.reflect.ParameterValidationContext;
+import org.gradle.internal.reflect.AnnotationCategory;
 import org.gradle.internal.reflect.PropertyMetadata;
+import org.gradle.internal.reflect.WorkValidationContext;
 
 import java.lang.annotation.Annotation;
 
+import static org.gradle.api.internal.tasks.properties.ModifierAnnotationCategory.OPTIONAL;
+
 public class LocalStatePropertyAnnotationHandler implements PropertyAnnotationHandler {
+    @Override
     public Class<? extends Annotation> getAnnotationType() {
         return LocalState.class;
+    }
+
+    @Override
+    public ImmutableSet<? extends AnnotationCategory> getAllowedModifiers() {
+        return ImmutableSet.of(OPTIONAL);
     }
 
     @Override
@@ -45,6 +55,6 @@ public class LocalStatePropertyAnnotationHandler implements PropertyAnnotationHa
     }
 
     @Override
-    public void validatePropertyMetadata(PropertyMetadata propertyMetadata, ParameterValidationContext visitor) {
+    public void validatePropertyMetadata(PropertyMetadata propertyMetadata, WorkValidationContext visitor) {
     }
 }

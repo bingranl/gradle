@@ -18,6 +18,7 @@ package org.gradle.api.internal.tasks
 
 import org.gradle.api.Action
 import org.gradle.api.DefaultTask
+import org.gradle.api.internal.tasks.execution.ExecuteTaskBuildOperationType
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Nested
@@ -26,7 +27,6 @@ import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.api.internal.tasks.execution.ExecuteTaskBuildOperationType
 import org.gradle.plugin.management.internal.autoapply.AutoAppliedBuildScanPlugin
 import spock.lang.Unroll
 
@@ -221,7 +221,7 @@ class SnapshotTaskInputsOperationIntegrationTest extends AbstractIntegrationSpec
         createDir("b") {
             file("build.gradle") << """
                 plugins { id 'java' }
-                dependencies { compile project(":a") }
+                dependencies { implementation project(":a") }
                 sourceSets.main.java.srcDir "other"
             """
             dir("src/main/java") {
@@ -261,9 +261,9 @@ class SnapshotTaskInputsOperationIntegrationTest extends AbstractIntegrationSpec
             normalization == "CLASSPATH"
         }
 
-        with(aCompileJava.source) {
+        with(aCompileJava.stableSources) {
             hash != null
-            normalization == "NAME_ONLY"
+            normalization == "RELATIVE_PATH"
             roots.size() == 1
             with(roots[0]) {
                 path == file("a/src/main/java").absolutePath
@@ -304,7 +304,7 @@ class SnapshotTaskInputsOperationIntegrationTest extends AbstractIntegrationSpec
                 !containsKey("children")
             }
         }
-        with(bCompileJava.source) {
+        with(bCompileJava.stableSources) {
             hash != null
             roots.size() == 2
             with(roots[0]) {

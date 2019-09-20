@@ -15,20 +15,20 @@
  */
 package org.gradle.performance.regression.inception
 
-import org.gradle.performance.AbstractCrossVersionPerformanceTest
-import org.gradle.performance.categories.PerformanceExperiment
+import org.gradle.performance.AbstractCrossVersionGradleInternalPerformanceTest
+import org.gradle.performance.categories.SlowPerformanceRegressionTest
 import org.gradle.performance.fixture.BuildExperimentInvocationInfo
 import org.gradle.performance.fixture.BuildExperimentListenerAdapter
 import org.junit.experimental.categories.Category
 import spock.lang.Issue
 import spock.lang.Unroll
 
-import static org.gradle.api.internal.artifacts.BaseRepositoryFactory.PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY
 import static org.gradle.integtests.fixtures.RepoScriptBlockUtil.createMirrorInitScript
 import static org.gradle.integtests.fixtures.RepoScriptBlockUtil.gradlePluginRepositoryMirrorUrl
 import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT
 import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL
 import static org.gradle.performance.generator.JavaTestProject.MEDIUM_MONOLITHIC_JAVA_PROJECT
+import static org.gradle.test.fixtures.server.http.MavenHttpPluginRepository.PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY
 
 /**
  * Test Gradle performance against it's own build.
@@ -42,17 +42,18 @@ import static org.gradle.performance.generator.JavaTestProject.MEDIUM_MONOLITHIC
  *   - e.g. change in Gradle that breaks the Gradle build
  */
 @Issue('https://github.com/gradle/gradle-private/issues/1313')
-class GradleInceptionPerformanceTest extends AbstractCrossVersionPerformanceTest {
+class GradleInceptionPerformanceTest extends AbstractCrossVersionGradleInternalPerformanceTest {
 
     static List<String> extraGradleBuildArguments() {
         ["-Djava9Home=${System.getProperty('java9Home')}",
          "-D${PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY}=${gradlePluginRepositoryMirrorUrl()}",
          "-Dorg.gradle.ignoreBuildJavaVersionCheck=true",
+         "-PbuildSrcCheck=false",
          "-I", createMirrorInitScript().absolutePath]
     }
 
     def setup() {
-        def targetVersion = "5.3-20190226212742+0000"
+        def targetVersion = "6.0-20190918220850+0000"
         runner.targetVersions = [targetVersion]
         runner.minimumVersion = targetVersion
     }
@@ -75,14 +76,14 @@ class GradleInceptionPerformanceTest extends AbstractCrossVersionPerformanceTest
         'help' | _
     }
 
-    @Category(PerformanceExperiment)
+    @Category(SlowPerformanceRegressionTest)
     @Unroll
     def "buildSrc api change in #testProject comparing gradle"() {
         given:
         runner.testProject = testProject
         runner.tasksToRun = ['help']
         runner.runs = runs
-        runner.args = extraGradleBuildArguments() + ["-Pgradlebuild.skipBuildSrcChecks=true"]
+        runner.args = extraGradleBuildArguments()
 
         and:
         def changingClassFilePath = "buildSrc/${buildSrcProjectDir}src/main/groovy/ChangingClass.groovy"
@@ -111,6 +112,6 @@ class GradleInceptionPerformanceTest extends AbstractCrossVersionPerformanceTest
         MEDIUM_MONOLITHIC_JAVA_PROJECT      | ""                   | 40
         LARGE_JAVA_MULTI_PROJECT            | ""                   | 20
         LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL | ""                   | 10
-        // TODO:kotlin-dsl 'gradleBuildCurrent'                | "subprojects/build/" | 10
+        'gradleBuildCurrent'                | "subprojects/build/" | 10
     }
 }

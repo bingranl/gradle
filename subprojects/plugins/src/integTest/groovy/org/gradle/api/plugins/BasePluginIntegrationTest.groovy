@@ -15,7 +15,6 @@
  */
 package org.gradle.api.plugins
 
-import org.gradle.api.internal.file.delete.Deleter
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
@@ -40,8 +39,8 @@ class BasePluginIntegrationTest extends AbstractIntegrationSpec {
         fails "clean"
 
         then:
-        failure.assertHasCause("Unable to delete directory '${file('build')}'")
-        failure.assertThatCause(containsString(Deleter.HELP_FAILED_DELETE_CHILDREN))
+        failure.assertThatCause(containsString("Unable to delete directory '${file('build')}'"))
+        failure.assertThatCause(containsString("Failed to delete some children. This might happen because a process has files open or has its working directory set in the target directory."))
         failure.assertThatCause(containsString(file("build/newFile").absolutePath))
 
         cleanup:
@@ -78,5 +77,25 @@ class BasePluginIntegrationTest extends AbstractIntegrationSpec {
 """
         expect:
         succeeds "tasks"
+    }
+
+    def "can override archiveBaseName in custom Jar task"() {
+        buildFile << """
+            apply plugin: 'base'
+            class MyJar extends Jar {
+                MyJar() {
+                    super()
+                    archiveBaseName.set("myjar")
+                }
+            }
+            task myJar(type: MyJar)
+            task assertCheck {
+                doLast {
+                    assert tasks.myJar.archiveBaseName.get() == "myjar"
+                }
+            }
+        """
+        expect:
+        succeeds("assertCheck")
     }
 }

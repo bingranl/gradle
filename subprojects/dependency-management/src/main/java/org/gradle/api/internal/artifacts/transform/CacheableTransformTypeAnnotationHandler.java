@@ -19,7 +19,7 @@ package org.gradle.api.internal.artifacts.transform;
 import org.gradle.api.artifacts.transform.CacheableTransform;
 import org.gradle.api.artifacts.transform.TransformAction;
 import org.gradle.api.internal.tasks.properties.annotations.TypeAnnotationHandler;
-import org.gradle.internal.reflect.ParameterValidationContext;
+import org.gradle.internal.reflect.WorkValidationContext;
 import org.gradle.model.internal.type.ModelType;
 
 import java.lang.annotation.Annotation;
@@ -31,9 +31,9 @@ public class CacheableTransformTypeAnnotationHandler implements TypeAnnotationHa
     }
 
     @Override
-    public void validateTypeMetadata(Class<?> classWithAnnotationAttached, ParameterValidationContext visitor) {
+    public void validateTypeMetadata(Class<?> classWithAnnotationAttached, WorkValidationContext visitor) {
         if (!TransformAction.class.isAssignableFrom(classWithAnnotationAttached)) {
-            visitor.visitErrorStrict(String.format("Cannot use @%s with type %s. This annotation can only be used with %s types.", getAnnotationType().getSimpleName(), ModelType.of(classWithAnnotationAttached).getDisplayName(), TransformAction.class.getSimpleName()));
+            visitor.visitError(String.format("Cannot use @%s with type %s. This annotation can only be used with %s types.", getAnnotationType().getSimpleName(), ModelType.of(classWithAnnotationAttached).getDisplayName(), TransformAction.class.getSimpleName()));
         }
     }
 }

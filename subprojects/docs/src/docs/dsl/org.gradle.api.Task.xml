@@ -35,6 +35,9 @@
                 <td>outputs</td>
             </tr>
             <tr>
+                <td>localState</td>
+            </tr>
+            <tr>
                 <td>destroyables</td>
             </tr>
             <tr>
@@ -69,6 +72,9 @@
             </tr>
             <tr>
                 <td>logging</td>
+            </tr>
+            <tr>
+                <td>timeout</td>
             </tr>
         </table>
     </section>

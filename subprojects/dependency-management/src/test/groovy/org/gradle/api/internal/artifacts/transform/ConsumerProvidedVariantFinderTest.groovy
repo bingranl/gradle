@@ -19,7 +19,6 @@ package org.gradle.api.internal.artifacts.transform
 import com.google.common.collect.ImmutableList
 import junit.framework.AssertionFailedError
 import org.gradle.api.Transformer
-import org.gradle.api.artifacts.transform.ArtifactTransform
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.internal.artifacts.ArtifactTransformRegistration
@@ -48,14 +47,6 @@ class ConsumerProvidedVariantFinderTest extends Specification {
     def c2 = attributes().attribute(a1, "1").attribute(a2, 2).asImmutable()
     def c3 = attributes().attribute(a1, "1").attribute(a2, 3).asImmutable()
 
-    static class Transform extends ArtifactTransform {
-        Transformer<List<File>, File> transformer
-
-        List<File> transform(File input) {
-            return transformer.transform(input)
-        }
-    }
-
     /**
      * Match all AttributeContainer that contains the same attributes.
      *
@@ -81,8 +72,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2, reg3]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.size() == 1
@@ -110,8 +100,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2, reg3]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.size() == 2
@@ -139,8 +128,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         def match = result.matches.first()
@@ -156,8 +144,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         0 * matcher._
 
         when:
-        def result2 = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result2)
+        def result2 = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         def match2 = result2.matches.first()
@@ -181,8 +168,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2, reg3]
 
         when:
-        def matchResult = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, matchResult)
+        def matchResult = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         def transformer = matchResult.matches.first()
@@ -203,7 +189,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         0 * matcher._
 
         when:
-        def result = transformer.transformation.transform(initialSubject("in.txt"), Mock(ExecutionGraphDependenciesResolver), null).get()
+        def result = transformer.transformation.createInvocation(initialSubject("in.txt"), Mock(ExecutionGraphDependenciesResolver), null).invoke().get()
 
         then:
         result.files == [new File("in.txt.2a.5"), new File("in.txt.2b.5")]
@@ -225,8 +211,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2, reg3]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.first().transformation.is(reg3.transformationStep)
@@ -265,8 +250,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [registrations[registrationsIndex[0]], registrations[registrationsIndex[1]], registrations[registrationsIndex[2]], registrations[registrationsIndex[3]]]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.size() == 1
@@ -288,7 +272,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         0 * matcher._
 
         when:
-        def files = result.matches.first().transformation.transform(initialSubject("a"), Mock(ExecutionGraphDependenciesResolver), null).get().files
+        def files = result.matches.first().transformation.createInvocation(initialSubject("a"), Mock(ExecutionGraphDependenciesResolver), null).invoke().get().files
 
         then:
         files == [new File("d"), new File("e")]
@@ -317,8 +301,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2, reg3]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.size() == 1
@@ -351,8 +334,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.empty
@@ -375,8 +357,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1, reg2]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.empty
@@ -389,8 +370,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         0 * matcher._
 
         when:
-        def result2 = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result2)
+        def result2 = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result2.matches.empty
@@ -415,8 +395,7 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         transformRegistrations.transforms >> [reg1]
 
         when:
-        def result = new ConsumerVariantMatchResult()
-        matchingCache.collectConsumerVariants(source, requested, result)
+        def result = matchingCache.collectConsumerVariants(source, requested)
 
         then:
         result.matches.empty
@@ -444,8 +423,8 @@ class ConsumerProvidedVariantFinderTest extends Specification {
         reg.from >> from
         reg.to >> to
         reg.transformationStep >> Stub(TransformationStep) {
-            _ * transform(_ as TransformationSubject, _ as ExecutionGraphDependenciesResolver, null) >> { TransformationSubject subject, ExecutionGraphDependenciesResolver dependenciesResolver, services ->
-                return Try.successful(subject.createSubjectFromResult(ImmutableList.copyOf(subject.files.collectMany { transformer.transform(it) })))
+            _ * createInvocation(_ as TransformationSubject, _ as ExecutionGraphDependenciesResolver, null) >> { TransformationSubject subject, ExecutionGraphDependenciesResolver dependenciesResolver, services ->
+                return CacheableInvocation.cached(Try.successful(subject.createSubjectFromResult(ImmutableList.copyOf(subject.files.collectMany { transformer.transform(it) }))))
             }
         }
         reg

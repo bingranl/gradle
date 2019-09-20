@@ -16,15 +16,11 @@
 
 package org.gradle.internal.execution.steps
 
-import org.gradle.internal.execution.Context
-import org.gradle.internal.execution.ExecutionException
-import org.gradle.internal.execution.IncrementalChangesContext
 import org.gradle.internal.execution.Result
 import spock.lang.Unroll
 
-class CatchExceptionStepTest extends StepSpec {
-    def step = new CatchExceptionStep<Context>(delegate)
-    def context = Mock(IncrementalChangesContext)
+class CatchExceptionStepTest extends ContextInsensitiveStepSpec {
+    def step = new CatchExceptionStep<>(delegate)
 
     def "successful result is preserved"() {
         def delegateResult = Mock(Result)
@@ -45,12 +41,9 @@ class CatchExceptionStepTest extends StepSpec {
         def result = step.execute(context)
 
         then:
-        result.outcome.failure.get() instanceof ExecutionException
-        result.outcome.failure.get().cause == failure
+        result.outcome.failure.get() == failure
 
         1 * delegate.execute(context) >> { throw failure }
-        1 * context.work >> work
-        1 * work.displayName >> "Failing work"
         0 * _
 
         where:

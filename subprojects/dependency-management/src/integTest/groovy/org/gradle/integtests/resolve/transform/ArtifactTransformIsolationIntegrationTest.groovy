@@ -93,13 +93,14 @@ class Resolve extends Copy {
                 }
 
                 @InputArtifact
-                abstract File getInput()
+                abstract Provider<FileSystemLocation> getInputArtifact()
 
                 CountRecorder() {
                     println "Creating CountRecorder"
                 }
                 
                 void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     def output = outputs.file(input.name + ".txt")
                     def counter = parameters.counter
                     println "Transforming \${input.name} to \${output.name}"
@@ -182,19 +183,19 @@ class Resolve extends Copy {
         run 'resolve', '--max-workers=1'
 
         then:
-        outputContains("variants: [{artifactType=firstCount}, {artifactType=firstCount}]")
+        outputContains("variants: [{artifactType=firstCount, org.gradle.status=release}, {artifactType=firstCount, org.gradle.status=release}]")
         file("build/libs1").assertHasDescendants("test-1.3.jar.txt", "test2-2.3.jar.txt")
         file("build/libs1/test-1.3.jar.txt").readLines() == ["1", "2", "3", "4", "5"]
         file("build/libs1/test2-2.3.jar.txt").readLines() == ["1", "2", "3", "4", "5"]
 
         and:
-        outputContains("variants: [{artifactType=secondCount}, {artifactType=secondCount}]")
+        outputContains("variants: [{artifactType=secondCount, org.gradle.status=release}, {artifactType=secondCount, org.gradle.status=release}]")
         file("build/libs2").assertHasDescendants("test-1.3.jar.txt", "test2-2.3.jar.txt")
         file("build/libs2/test-1.3.jar.txt").readLines() == ["2", "3", "4", "5", "6"]
         file("build/libs2/test2-2.3.jar.txt").readLines() == ["2", "3", "4", "5", "6"]
 
         and:
-        outputContains("variants: [{artifactType=thirdCount}, {artifactType=thirdCount}]")
+        outputContains("variants: [{artifactType=thirdCount, org.gradle.status=release}, {artifactType=thirdCount, org.gradle.status=release}]")
         file("build/libs3").assertHasDescendants("test-1.3.jar.txt", "test2-2.3.jar.txt")
         file("build/libs3/test-1.3.jar.txt").readLines() == ["3", "4", "5", "6", "7"]
         file("build/libs3/test2-2.3.jar.txt").readLines() == ["3", "4", "5", "6", "7"]
@@ -304,19 +305,19 @@ class Resolve extends Copy {
         run 'resolve'
 
         then:
-        outputContains("variants: [{artifactType=firstCount}, {artifactType=firstCount}]")
+        outputContains("variants: [{artifactType=firstCount, org.gradle.status=release}, {artifactType=firstCount, org.gradle.status=release}]")
         file("build/libs1").assertHasDescendants("test-1.3.jar.txt", "test2-2.3.jar.txt")
         file("build/libs1/test-1.3.jar.txt").readLines() == ["0", "1", "2", "3", "4"]
         file("build/libs1/test2-2.3.jar.txt").readLines() == ["0", "1", "2", "3", "4"]
 
         and:
-        outputContains("variants: [{artifactType=secondCount}, {artifactType=secondCount}]")
+        outputContains("variants: [{artifactType=secondCount, org.gradle.status=release}, {artifactType=secondCount, org.gradle.status=release}]")
         file("build/libs2").assertHasDescendants("test-1.3.jar.txt", "test2-2.3.jar.txt")
         file("build/libs2/test-1.3.jar.txt").readLines() == ["1", "2", "3", "4", "5"]
         file("build/libs2/test2-2.3.jar.txt").readLines() == ["1", "2", "3", "4", "5"]
 
         and:
-        outputContains("variants: [{artifactType=thirdCount}, {artifactType=thirdCount}]")
+        outputContains("variants: [{artifactType=thirdCount, org.gradle.status=release}, {artifactType=thirdCount, org.gradle.status=release}]")
         file("build/libs3").assertHasDescendants("test-1.3.jar.txt", "test2-2.3.jar.txt")
         file("build/libs3/test-1.3.jar.txt").readLines() == ["2", "3", "4", "5", "6"]
         file("build/libs3/test2-2.3.jar.txt").readLines() == ["2", "3", "4", "5", "6"]

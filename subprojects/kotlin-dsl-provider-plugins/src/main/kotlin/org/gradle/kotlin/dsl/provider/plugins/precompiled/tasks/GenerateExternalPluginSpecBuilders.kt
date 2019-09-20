@@ -16,8 +16,9 @@
 
 package org.gradle.kotlin.dsl.provider.plugins.precompiled.tasks
 
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.CacheableTask
-import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 
 import org.gradle.kotlin.dsl.accessors.writeSourceCodeForPluginSpecBuildersFor
@@ -26,42 +27,37 @@ import java.io.File
 
 
 @CacheableTask
-open class GenerateExternalPluginSpecBuilders : ClassPathSensitiveCodeGenerationTask() {
+abstract class GenerateExternalPluginSpecBuilders : ClassPathSensitiveCodeGenerationTask(), SharedAccessorsPackageAware {
+
+    @get:OutputDirectory
+    abstract val metadataOutputDir: DirectoryProperty
 
     @TaskAction
     @Suppress("unused")
     internal
-    fun generate() =
+    fun generate() {
         sourceCodeOutputDir.withOutputDirectory { outputDir ->
             val packageDir = createPackageDirIn(outputDir)
-            val outputFile = packageDir.resolve("PluginSpecBuildersFor$$classPathHash.kt")
+            val outputFile = packageDir.resolve("PluginSpecBuilders.kt")
             writeSourceCodeForPluginSpecBuildersFor(
                 classPath,
                 outputFile,
-                packageName = kotlinPackageName
+                packageName()
             )
         }
+        metadataOutputDir.withOutputDirectory { outputDir ->
+            outputDir.resolve("implicit-imports").writeText(
+                packageName() + ".*"
+            )
+        }
+    }
 
     private
     fun createPackageDirIn(outputDir: File) = outputDir.resolve(packagePath()).apply { mkdirs() }
 
     private
-    fun packagePath() = packageName.split('.').joinToString("/")
+    fun packagePath() = packageName().split('.').joinToString("/")
 
-    @get:Internal
-    internal
-    val kotlinPackageName by lazy {
-        kotlinPackageNameFor(packageName)
-    }
-
-    // TODO:kotlin-dsl move to a package name derived from the classpath hash
-    // "gradle.kotlin.dsl.plugins._$classPathHash"
     private
-    val packageName
-        get() = "gradle.kotlin.dsl.plugins"
+    fun packageName() = sharedAccessorsPackage.get()
 }
-
-
-private
-fun kotlinPackageNameFor(packageName: String) =
-    packageName.split('.').joinToString(".") { "`$it`" }

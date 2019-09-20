@@ -39,9 +39,16 @@ class AbstractInitIntegrationSpec extends AbstractIntegrationSpec {
         result.testClass(className).assertTestPassed(name)
     }
 
+    void assertFunctionalTestPassed(String className, String name) {
+        def result = new DefaultTestExecutionResult(targetDir, 'build', '', '', 'functionalTest')
+        result.assertTestClassesExecuted(className)
+        result.testClass(className).assertTestPassed(name)
+    }
+
     protected void commonFilesGenerated(BuildInitDsl scriptDsl) {
         dslFixtureFor(scriptDsl).assertGradleFilesGenerated()
         targetDir.file(".gitignore").assertIsFile()
+        targetDir.file(".gitattributes").assertIsFile()
     }
     protected void commonJvmFilesGenerated(BuildInitDsl scriptDsl) {
         commonFilesGenerated(scriptDsl)

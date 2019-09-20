@@ -19,18 +19,19 @@ package org.gradle.caching.http.internal
 import org.apache.http.HttpHeaders
 import org.apache.http.HttpStatus
 import org.gradle.api.UncheckedIOException
+import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.caching.BuildCacheEntryWriter
 import org.gradle.caching.BuildCacheException
 import org.gradle.caching.BuildCacheKey
 import org.gradle.caching.BuildCacheService
 import org.gradle.caching.BuildCacheServiceFactory
 import org.gradle.caching.http.HttpBuildCache
+import org.gradle.internal.hash.HashCode
 import org.gradle.internal.resource.transport.http.DefaultSslContextFactory
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.test.fixtures.server.http.AuthScheme
 import org.gradle.test.fixtures.server.http.HttpResourceInteraction
 import org.gradle.test.fixtures.server.http.HttpServer
-import org.gradle.util.GradleVersion
 import org.junit.Rule
 import spock.lang.Specification
 
@@ -58,14 +59,21 @@ class HttpBuildCacheServiceTest extends Specification {
     BuildCacheServiceFactory.Describer buildCacheDescriber
 
     def key = new BuildCacheKey() {
+        def hashCode = HashCode.fromString("01234567abcdef")
+
         @Override
         String getHashCode() {
-            return '0123456abcdef'
+            return hashCode.toString()
         }
 
         @Override
         String toString() {
             return getHashCode()
+        }
+
+        @Override
+        byte[] toByteArray() {
+            return hashCode.toByteArray()
         }
 
         @Override
@@ -79,7 +87,8 @@ class HttpBuildCacheServiceTest extends Specification {
         def config = new HttpBuildCache()
         config.url = server.uri.resolve("/cache/")
         buildCacheDescriber = new NoopBuildCacheDescriber()
-        cache = new DefaultHttpBuildCacheServiceFactory(new DefaultSslContextFactory()).createBuildCacheService(config, buildCacheDescriber)
+        cache = new DefaultHttpBuildCacheServiceFactory(new DefaultSslContextFactory(), new DocumentationRegistry(), { it.addHeader("X-Gradle-Version", "3.0")})
+            .createBuildCacheService(config, buildCacheDescriber)
     }
 
     def "can cache artifact"() {
@@ -230,8 +239,7 @@ class HttpBuildCacheServiceTest extends Specification {
     def "sends X-Gradle-Version and Content-Type headers on GET"() {
         server.expect("/cache/${key.hashCode}", ["GET"], new HttpServer.ActionSupport("get has appropriate headers") {
             void handle(HttpServletRequest request, HttpServletResponse response) {
-                def gradleVersion = GradleVersion.version(request.getHeader("X-Gradle-Version"))
-                assert gradleVersion == GradleVersion.current()
+                request.getHeader("X-Gradle-Version") == "3.0"
 
                 def accept = request.getHeader(HttpHeaders.ACCEPT).split(", ")
                 assert accept.length == 2
@@ -249,8 +257,7 @@ class HttpBuildCacheServiceTest extends Specification {
     def "sends X-Gradle-Version and Content-Type headers on PUT"() {
         server.expect("/cache/${key.hashCode}", ["PUT"], new HttpServer.ActionSupport("put has appropriate headers") {
             void handle(HttpServletRequest request, HttpServletResponse response) {
-                def gradleVersion = GradleVersion.version(request.getHeader("X-Gradle-Version"))
-                assert gradleVersion == GradleVersion.current()
+                request.getHeader("X-Gradle-Version") == "3.0"
 
                 assert request.getHeader(HttpHeaders.CONTENT_TYPE) == HttpBuildCacheService.BUILD_CACHE_CONTENT_TYPE
 
@@ -267,7 +274,7 @@ class HttpBuildCacheServiceTest extends Specification {
         configuration.url = server.uri.resolve("/cache/")
         configuration.credentials.username = 'user'
         configuration.credentials.password = 'password'
-        cache = new DefaultHttpBuildCacheServiceFactory(new DefaultSslContextFactory()).createBuildCacheService(configuration, buildCacheDescriber) as HttpBuildCacheService
+        cache = new DefaultHttpBuildCacheServiceFactory(new DefaultSslContextFactory(), new DocumentationRegistry(), {}).createBuildCacheService(configuration, buildCacheDescriber) as HttpBuildCacheService
 
         server.authenticationScheme = AuthScheme.BASIC
 

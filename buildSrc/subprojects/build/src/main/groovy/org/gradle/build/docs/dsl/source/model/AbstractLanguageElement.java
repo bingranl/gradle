@@ -35,6 +35,7 @@ public abstract class AbstractLanguageElement implements LanguageElement, Serial
         this.rawCommentText = rawCommentText;
     }
 
+    @Override
     public String getRawCommentText() {
         return rawCommentText;
     }
@@ -43,6 +44,7 @@ public abstract class AbstractLanguageElement implements LanguageElement, Serial
         this.rawCommentText = rawCommentText;
     }
 
+    @Override
     public List<String> getAnnotationTypeNames() {
         return annotationNames;
     }
@@ -51,16 +53,18 @@ public abstract class AbstractLanguageElement implements LanguageElement, Serial
         annotationNames.add(annotationType);
     }
 
+    @Override
     public boolean isDeprecated() {
         return annotationNames.contains(Deprecated.class.getName());
     }
 
+    @Override
     public boolean isIncubating() {
         return annotationNames.contains("org.gradle.api.Incubating");
     }
 
     public boolean isReplaced() {
-        return annotationNames.contains("org.gradle.api.ReplacedBy");
+        return annotationNames.contains("org.gradle.api.model.ReplacedBy");
     }
 
     public String getReplacement() {

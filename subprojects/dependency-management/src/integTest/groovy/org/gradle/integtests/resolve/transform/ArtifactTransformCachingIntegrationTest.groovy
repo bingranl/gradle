@@ -44,7 +44,9 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
             include 'util'
             include 'app'
         """
-        buildFile << resolveTask
+        buildFile << resolveTask << """
+            import org.gradle.api.artifacts.transform.TransformParameters
+        """
     }
 
     def "transform is applied to each file once per build"() {
@@ -71,6 +73,27 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
         output.count("files: [lib1.jar.txt, lib2.jar.txt, lib3.jar.txt]") == 2
 
         output.count("Transformed") == 0
+    }
+
+    def "task cannot write into transform directory"() {
+        def forbiddenPath = ".transforms/not-allowed.txt"
+
+        buildFile << """
+            subprojects {
+                task badTask {
+                    outputs.file { project.layout.buildDirectory.file("${forbiddenPath}") }
+                    doLast { }
+                }
+            }
+        """
+
+        when:
+        fails "badTask", "--continue"
+        then:
+        ['lib', 'app', 'util'].each {
+            failure.assertHasDescription("A problem was found with the configuration of task ':${it}:badTask'.")
+            failure.assertHasCause("The output ${file("${it}/build/${forbiddenPath}")} must not be in a reserved location.")
+        }
     }
 
     def "scheduled transformation is invoked before consuming task is executed"() {
@@ -151,54 +174,56 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
                 dependencies {
                     compile project(':lib')
                     
-                    registerTransform {
+                    registerTransform(MakeBlueToGreenThings) {
                         from.attribute(Attribute.of('color', String), "blue")
                         to.attribute(Attribute.of('color', String), "green")
-                        artifactTransform(MakeBlueToGreenThings)
                     }
-                    registerTransform {
+                    registerTransform(MakeGreenToRedThings) {
                         from.attribute(Attribute.of('color', String), "green")
                         to.attribute(Attribute.of('color', String), "red")
-                        artifactTransform(MakeGreenToRedThings)
                     }
-                    registerTransform {
+                    registerTransform(MakeGreenToYellowThings) {
                         from.attribute(Attribute.of('color', String), "green")
                         to.attribute(Attribute.of('color', String), "yellow")
-                        artifactTransform(MakeGreenToYellowThings)
                     }
                 }
             }
 
-            class MakeGreenToRedThings extends ArtifactTransform {
-                List<File> transform(File input) {
-                    assert outputDirectory.directory && outputDirectory.list().length == 0
-                    def output = new File(outputDirectory, input.name + ".red")
+            abstract class MakeThingsColored implements TransformAction<TransformParameters.None> {
+                private final String targetColor
+
+                MakeThingsColored(String targetColor) {
+                    this.targetColor = targetColor
+                }
+
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
+                    def output = outputs.file(input.name + ".\${targetColor}")
+                    assert output.parentFile.directory && output.parentFile.list().length == 0
                     println "Transforming \${input.name} to \${output.name}"
                     println "Input exists: \${input.exists()}"
                     output.text = String.valueOf(input.length())
-                    return [output]
+                }
+            } 
+
+            abstract class MakeGreenToRedThings extends MakeThingsColored {
+                MakeGreenToRedThings() {
+                    super('red')
                 }
             }
 
-            class MakeGreenToYellowThings extends ArtifactTransform {
-                List<File> transform(File input) {
-                    assert outputDirectory.directory && outputDirectory.list().length == 0
-                    def output = new File(outputDirectory, input.name + ".yellow")
-                    println "Transforming \${input.name} to \${output.name}"
-                    println "Input exists: \${input.exists()}"
-                    output.text = String.valueOf(input.length())
-                    return [output]
+            abstract class MakeGreenToYellowThings extends MakeThingsColored {
+                MakeGreenToYellowThings() {
+                    super('yellow')
                 }
             }
 
-            class MakeBlueToGreenThings extends ArtifactTransform {
-                List<File> transform(File input) {
-                    assert outputDirectory.directory && outputDirectory.list().length == 0
-                    def output = new File(outputDirectory, input.name + ".green")
-                    println "Transforming \${input.name} to \${output.name}"
-                    println "Input exists: \${input.exists()}"
-                    output.text = String.valueOf(input.length())
-                    return [output]
+            abstract class MakeBlueToGreenThings extends MakeThingsColored {
+                MakeBlueToGreenThings() {
+                    super('green')
                 }
             }
         """ << withJarTasks()
@@ -215,48 +240,116 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
         output.count("> Transform artifact lib2.jar (project :lib) with MakeGreenToRedThings") == 1
     }
 
+    def "executes transform immediately when required during task graph building"() {
+        buildFile << declareAttributes() << withJarTasks() << """
+            import org.gradle.api.artifacts.transform.TransformParameters
+
+            abstract class MakeGreen implements TransformAction<TransformParameters.None> {
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+                
+                @Override                
+                void transform(TransformOutputs outputs) {
+                    outputs.file(inputArtifact.get().asFile.name + ".green").text = "very green"
+                }
+            }
+
+            project(':util') {
+                dependencies {
+                    compile project(':lib')
+                }
+            }
+    
+            project(':app') {
+                dependencies {
+                    compile project(':util')
+                    
+                    registerTransform(MakeGreen) {
+                        from.attribute(artifactType, 'jar')
+                        to.attribute(artifactType, 'green')
+                    }                    
+                }
+                configurations {
+                    green {
+                        extendsFrom(compile)
+                        canBeResolved = true
+                        canBeConsumed = false
+                        attributes {
+                            attribute(artifactType, 'green')
+                        }
+                    }
+                }
+            
+                tasks.register("resolveAtConfigurationTime").configure {
+                    inputs.files(configurations.green)
+                    configurations.green.each { println it }
+                    doLast { }                    
+                }
+                tasks.register("declareTransformAsInput").configure {
+                    inputs.files(configurations.green)
+                    doLast {
+                        configurations.green.each { println it }
+                    }
+                }
+                
+                tasks.register("withDependency").configure {
+                    dependsOn("resolveAtConfigurationTime")
+                }
+                tasks.register("toBeFinalized").configure {
+                    // We require the task via a finalizer, so the transform node is in UNKNOWN state.
+                    finalizedBy("declareTransformAsInput")
+                }
+            }
+        """
+
+        when:
+        run(":app:toBeFinalized", "withDependency", "--info")
+        then:
+        output.count("Transforming artifact lib1.jar (project :lib) with MakeGreen") == 2
+        output.count("Transforming artifact lib2.jar (project :lib) with MakeGreen") == 2
+    }
+
     def "each file is transformed once per set of configuration parameters"() {
         given:
         buildFile << declareAttributes() << withJarTasks() << withLibJarDependency("lib3.jar") << """
-            class TransformWithMultipleTargets extends ArtifactTransform {
-                private String target
-                
-                @javax.inject.Inject
-                TransformWithMultipleTargets(String target) {
-                    this.target = target
+            abstract class TransformWithMultipleTargets implements TransformAction<Parameters> {
+                interface Parameters extends TransformParameters {
+                    @Input
+                    Property<String> getTarget() 
                 }
                 
-                List<File> transform(File input) {
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     assert input.exists()
+                    def output = outputs.file(input.name + ".\${parameters.target.get()}")
+                    def outputDirectory = output.parentFile
                     assert outputDirectory.directory && outputDirectory.list().length == 0
-                    if (target.equals("size")) {
-                        def outSize = new File(outputDirectory, input.name + ".size")
-                        println "Transformed \$input.name to \$outSize.name into \$outputDirectory"
-                        outSize.text = String.valueOf(input.length())
-                        return [outSize]
-                    } else if (target.equals("hash")) {
-                        def outHash = new File(outputDirectory, input.name + ".hash")
-                        println "Transformed \$input.name to \$outHash.name into \$outputDirectory"
-                        outHash.text = 'hash'
-                        return [outHash]
+                    if (parameters.target.get() == "size") {
+                        output.text = String.valueOf(input.length())
+                    } else if (parameters.target.get() == "hash") {
+                        output.text = 'hash'
                     }             
+                    println "Transformed \$input.name to \$output.name into \$outputDirectory"
                 }
             }
             
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(TransformWithMultipleTargets) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'size')
-                        artifactTransform(TransformWithMultipleTargets) {
-                            params('size')
+                        parameters {
+                            target = 'size'
                         }
                     }
-                    registerTransform {
+                    registerTransform(TransformWithMultipleTargets) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'hash')
-                        artifactTransform(TransformWithMultipleTargets) {
-                            params('hash')
+                        parameters {
+                            target = 'hash'
                         }
                     }
                 }
@@ -325,46 +418,45 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
                 String value
             }
             
-            class TransformWithMultipleTargets extends ArtifactTransform {
-                private CustomType target
-                
-                @javax.inject.Inject
-                TransformWithMultipleTargets(CustomType target) {
-                    this.target = target
+            abstract class TransformWithMultipleTargets implements TransformAction<Parameters> {
+            
+                interface Parameters extends TransformParameters {
+                    @Input
+                    CustomType getTarget()
+                    void setTarget(CustomType target)
                 }
                 
-                List<File> transform(File input) {
-                    assert input.exists()
-                    assert outputDirectory.directory && outputDirectory.list().length == 0
-                    if (target.value == "size") {
-                        def outSize = new File(outputDirectory, input.name + ".size")
-                        println "Transformed \$input.name to \$outSize.name into \$outputDirectory"
-                        outSize.text = String.valueOf(input.length())
-                        return [outSize]
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
+                    def output = outputs.file(input.name + ".\${parameters.target.value}")
+                    def outputDirectory = output.parentFile
+                    if (parameters.target.value == "size") {
+                        output.text = String.valueOf(input.length())
                     }
-                    if (target.value == "hash") {
-                        def outHash = new File(outputDirectory, input.name + ".hash")
-                        println "Transformed \$input.name to \$outHash.name into \$outputDirectory"
-                        outHash.text = 'hash'
-                        return [outHash]
+                    if (parameters.target.value == "hash") {
+                        output.text = 'hash'
                     }             
+                    println "Transformed \$input.name to \$output.name into \$outputDirectory"
                 }
             }
             
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(TransformWithMultipleTargets) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'size')
-                        artifactTransform(TransformWithMultipleTargets) {
-                            params(new CustomType(value: 'size'))
+                        parameters {
+                            target = new CustomType(value: 'size')
                         }
                     }
-                    registerTransform {
+                    registerTransform(TransformWithMultipleTargets) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'hash')
-                        artifactTransform(TransformWithMultipleTargets) {
-                            params(new CustomType(value: 'hash'))
+                        parameters {
+                            target = new CustomType(value: 'hash')
                         }
                     }
                 }
@@ -425,31 +517,33 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
     def "can use configuration parameter of type #type"() {
         given:
         buildFile << declareAttributes() << withJarTasks() << """
-            class TransformWithMultipleTargets extends ArtifactTransform {
-                private $type target
-                
-                @javax.inject.Inject
-                TransformWithMultipleTargets($type target) {
-                    this.target = target
+            abstract class TransformWithMultipleTargets implements TransformAction<Parameters> {
+
+                interface Parameters extends TransformParameters {
+                    @Input
+                    $type getTarget()
+                    void setTarget($type target)
                 }
                 
-                List<File> transform(File input) {
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     assert input.exists()
-                    assert outputDirectory.directory && outputDirectory.list().length == 0
-                    def outSize = new File(outputDirectory, input.name + ".value")
-                    println "Transformed \$input.name to \$outSize.name into \$outputDirectory"
-                    outSize.text = String.valueOf(input.length()) + String.valueOf(target)
-                    return [outSize]
+                    def output = outputs.file(input.name + ".value")
+                    println "Transformed \$input.name to \$output.name into \$output.parentFile"
+                    output.text = String.valueOf(input.length()) + String.valueOf(parameters.target)
                 }
             }
             
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(TransformWithMultipleTargets) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'value')
-                        artifactTransform(TransformWithMultipleTargets) {
-                            params($value)
+                        parameters {
+                            target = $value
                         }
                     }
                 }
@@ -512,50 +606,59 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
     def "each file is transformed once per transform class"() {
         given:
         buildFile << declareAttributes() << withJarTasks() << withLibJarDependency("lib3.jar") << """
-            class Sizer extends ArtifactTransform {
-                @javax.inject.Inject
-                Sizer(String target) {
-                    // ignore config
+            abstract class Sizer implements TransformAction<Parameters> {
+                interface Parameters extends TransformParameters {
+                    @Input
+                    Property<String> getTarget()
                 }
                 
-                List<File> transform(File input) {
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     assert input.exists()
+                    def output = outputs.file(input.name + ".size")
+                    def outputDirectory = output.parentFile 
                     assert outputDirectory.directory && outputDirectory.list().length == 0
-                    def outSize = new File(outputDirectory, input.name + ".size")
-                    println "Transformed \$input.name to \$outSize.name into \$outputDirectory"
-                    outSize.text = String.valueOf(input.length())
-                    return [outSize]
+                    println "Transformed \$input.name to \$output.name into \$outputDirectory"
+                    output.text = String.valueOf(input.length())
                 }
             }
-            class Hasher extends ArtifactTransform {
-                private String target
-                
-                @javax.inject.Inject
-                Hasher(String target) {
-                    // ignore config
+            abstract class Hasher implements TransformAction<Parameters> {
+                interface Parameters extends TransformParameters {
+                    @Input
+                    Property<String> getTarget()
                 }
                 
-                List<File> transform(File input) {
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     assert input.exists()
-                    assert outputDirectory.directory && outputDirectory.list().length == 0
-                    def outHash = new File(outputDirectory, input.name + ".hash")
-                    println "Transformed \$input.name to \$outHash.name into \$outputDirectory"
-                    outHash.text = 'hash'
-                    return [outHash]
+                    def output = outputs.file(input.name + ".hash")
+                    def outputDirectory = output.parentFile 
+                    println "Transformed \$input.name to \$output.name into \$outputDirectory"
+                    output.text = 'hash'
                 }
             }
             
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(Sizer) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'size')
-                        artifactTransform(Sizer) { params('size') }
+                        parameters {
+                            target = 'size'
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Hasher) {
                         from.attribute(artifactType, 'jar')
                         to.attribute(artifactType, 'hash')
-                        artifactTransform(Hasher) { params('hash') }
+                        parameters {
+                            target = 'hash'
+                        }
                     }
                 }
                 task resolveSize(type: Resolve) {
@@ -626,8 +729,8 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
 
         then:
         failure.assertHasCause("Could not resolve all files for configuration ':app:compile'.")
-        failure.assertHasCause("Failed to transform artifact 'lib1.jar (project :lib)' to match attributes {artifactType=size, usage=api}")
-        failure.assertHasCause("Failed to transform artifact 'lib2.jar (project :lib)' to match attributes {artifactType=size, usage=api}")
+        failure.assertHasCause("Failed to transform lib1.jar (project :lib) to match attributes {artifactType=size, usage=api}")
+        failure.assertHasCause("Failed to transform lib2.jar (project :lib) to match attributes {artifactType=size, usage=api}")
         def outputDir1 = projectOutputDir("lib1.jar", "lib1.jar.txt")
         def outputDir2 = projectOutputDir("lib2.jar", "lib2.jar.txt")
         def outputDir3 = gradleUserHomeOutputDir("lib3.jar", "lib3.jar.txt")
@@ -724,15 +827,21 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
 
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "jar")
                         to.attribute(artifactType, "green")
-                        artifactTransform(Duplicator) { params(2, false) }
+                        parameters {
+                            numberOfOutputFiles = 2
+                            differentOutputFileNames = false
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "green")
                         to.attribute(artifactType, "blue")
-                        artifactTransform(Duplicator) { params(2, false) }
+                        parameters {
+                            numberOfOutputFiles = 2
+                            differentOutputFileNames = false
+                        }
                     }
                 }
                 task resolve(type: Resolve) {
@@ -780,25 +889,37 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
 
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "jar")
                         to.attribute(artifactType, "green")
-                        artifactTransform(Duplicator) { params(2, true) }
+                        parameters {
+                            numberOfOutputFiles = 2
+                            differentOutputFileNames = true
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "green")
                         to.attribute(artifactType, "blue")
-                        artifactTransform(Duplicator)  { params(1, false) }
+                        parameters {
+                            numberOfOutputFiles = 1
+                            differentOutputFileNames = false
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "blue")
                         to.attribute(artifactType, "yellow")
-                        artifactTransform(Duplicator)  { params(3, false) }
+                        parameters {
+                            numberOfOutputFiles = 3
+                            differentOutputFileNames = false
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "yellow")
                         to.attribute(artifactType, "orange")
-                        artifactTransform(Duplicator)  { params(1, true) }
+                        parameters {
+                            numberOfOutputFiles = 1
+                            differentOutputFileNames = true
+                        }
                     }
                 }
                 task resolve(type: Resolve) {
@@ -824,15 +945,10 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
             index == failingTransform ? "FailingDuplicator" : "Duplicator"
         }
         buildFile << declareAttributes() << withJarTasks() << withLibJarDependency("lib3.jar") << duplicatorTransform << """
-            class FailingDuplicator extends Duplicator {
+            abstract class FailingDuplicator extends Duplicator {
                 
-                @javax.inject.Inject
-                FailingDuplicator(int numberOfOutputFiles, boolean differentOutputFileNames) {
-                    super(numberOfOutputFiles, differentOutputFileNames) 
-                }                                                       
-
                 @Override
-                List<File> transform(File input) {
+                void transform(TransformOutputs outputs) {
                     throw new RuntimeException("broken")
                 }                
             }
@@ -845,25 +961,37 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
 
             allprojects {
                 dependencies {
-                    registerTransform {
+                    registerTransform(${possiblyFailingTransform(1)}) {
                         from.attribute(artifactType, "jar")
                         to.attribute(artifactType, "green")
-                        artifactTransform(${possiblyFailingTransform(1)}) { params(2, true) }
+                        parameters {
+                            numberOfOutputFiles = 2
+                            differentOutputFileNames = true
+                        }
                     }
-                    registerTransform {
+                    registerTransform(${possiblyFailingTransform(2)}) {
                         from.attribute(artifactType, "green")
                         to.attribute(artifactType, "blue")
-                        artifactTransform(${possiblyFailingTransform(2)})  { params(1, false) }
+                        parameters {
+                            numberOfOutputFiles = 1
+                            differentOutputFileNames = false
+                        }
                     }
-                    registerTransform {
+                    registerTransform(${possiblyFailingTransform(3)}) {
                         from.attribute(artifactType, "blue")
                         to.attribute(artifactType, "yellow")
-                        artifactTransform(${possiblyFailingTransform(3)})  { params(3, false) }
+                        parameters {
+                            numberOfOutputFiles = 3
+                            differentOutputFileNames = false
+                        }
                     }
-                    registerTransform {
+                    registerTransform(${possiblyFailingTransform(4)}) {
                         from.attribute(artifactType, "yellow")
                         to.attribute(artifactType, "orange")
-                        artifactTransform(${possiblyFailingTransform(4)})  { params(1, true) }
+                        parameters {
+                            numberOfOutputFiles = 1
+                            differentOutputFileNames = true
+                        }
                     }
                 }
                 task resolve(type: Resolve) {
@@ -916,20 +1044,29 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
                 }
             
                 dependencies {
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "jar")
                         to.attribute(artifactType, "green")
-                        artifactTransform(Duplicator) { params(2, true) }
+                        parameters {
+                            numberOfOutputFiles= 2
+                            differentOutputFileNames= true
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "green")
                         to.attribute(artifactType, "blue")
-                        artifactTransform(Duplicator)  { params(1, false) }
+                        parameters {
+                            numberOfOutputFiles= 1
+                            differentOutputFileNames= false
+                        }
                     }
-                    registerTransform {
+                    registerTransform(Duplicator) {
                         from.attribute(artifactType, "blue")
                         to.attribute(artifactType, "yellow")
-                        artifactTransform(Duplicator)  { params(3, false) }
+                        parameters {
+                            numberOfOutputFiles= 3
+                            differentOutputFileNames= false
+                        }
                     }
                 }
                 task resolve(type: Resolve) {
@@ -957,30 +1094,27 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
     String duplicatorTransform = """
             import java.nio.file.Files
 
-            class Duplicator extends ArtifactTransform {
-            
-                final int numberOfOutputFiles
-                final boolean differentOutputFileNames                                            
+            abstract class Duplicator implements TransformAction<Parameters> {
+                interface Parameters extends TransformParameters {
+                    @Input
+                    Property<Integer> getNumberOfOutputFiles()
+                    @Input
+                    Property<Boolean> getDifferentOutputFileNames()
+                }            
                            
-                @javax.inject.Inject
-                Duplicator(int numberOfOutputFiles, boolean differentOutputFileNames) {
-                    this.numberOfOutputFiles = numberOfOutputFiles
-                    this.differentOutputFileNames = differentOutputFileNames                      
-                } 
-        
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
                 @Override
-                List<File> transform(File input) {
-                    def result = []
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
                     println("Transforming \${input.name}")
-                    for (int i = 0; i < numberOfOutputFiles; i++) {
-                        def suffix = differentOutputFileNames ? i : ""
-                        def output = new File(outputDirectory, "\$i/" + input.name + suffix)
-                        output.parentFile.mkdirs()
+                    for (int i = 0; i < parameters.numberOfOutputFiles.get(); i++) {
+                        def suffix = parameters.differentOutputFileNames.get() ? i : ""
+                        def output = outputs.file("\$i/\${input.name}\$suffix")
                         Files.copy(input.toPath(), output.toPath())
-                        println "Transformed \${input.name} to \$i/\${output.name} into \$outputDirectory"
-                        result.add(output)
+                        println "Transformed \${input.name} to \$i/\${output.name} into \$output.parentFile.parentFile"
                     }
-                    return result
                 }
             }
     """
@@ -1320,22 +1454,25 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
 
         and:
         buildFile << declareAttributes() << withLibJarDependency() << """
-            class BlockingTransform extends ArtifactTransform {
-                List<File> transform(File input) {
-                    def output = new File(outputDirectory, "\${input.name}.txt");
+            abstract class BlockingTransform implements TransformAction<TransformParameters.None> {
+                @InputArtifact
+                abstract Provider<FileSystemLocation> getInputArtifact()
+
+                void transform(TransformOutputs outputs) {
+                    def input = inputArtifact.get().asFile
+                    def output = outputs.file("\${input.name}.txt")
+                    def outputDirectory = output.parentFile
                     output.text = ""
                     println "Transformed \$input.name to \$output.name into \$outputDirectory"
                     ${blockingHttpServer.callFromBuild("transform")}
-                    return [output]
                 }
             }
             
             project(':app') {
                 dependencies {
-                    registerTransform {
+                    registerTransform(BlockingTransform) {
                         from.attribute(artifactType, "jar")
                         to.attribute(artifactType, "blocking")
-                        artifactTransform(BlockingTransform)
                     }
                     compile project(':lib')
                 }
@@ -1426,7 +1563,7 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
     def multiProjectWithJarSizeTransform(Map options = [:]) {
         def paramValue = options.paramValue ?: "1"
         def fileValue = options.fileValue ?: "String.valueOf(input.length())"
-        def useParameterObject = options.parameterObject ?: false
+        def useParameterObject = options.parameterObject == null ? true : options.parameterObject
 
         """
             ext.paramValue = $paramValue
@@ -1487,7 +1624,11 @@ ${getFileSizerBody(fileValue, 'new File(outputDirectory, ', 'new File(outputDire
                 }
 
                 @InputArtifact
-                abstract File getInput()
+                abstract Provider<FileSystemLocation> getInputArtifact()
+                
+                private File getInput() {
+                    inputArtifact.get().asFile
+                }
                 
                 void transform(TransformOutputs outputs) {
 ${getFileSizerBody(fileValue, 'outputs.dir(', 'outputs.file(')}
@@ -1504,7 +1645,7 @@ ${getFileSizerBody(fileValue, 'outputs.dir(', 'outputs.file(')}
                         }
                     }
                 }
-                task resolve(type: Resolve) {
+                tasks.register("resolve", Resolve) {
                     artifacts = configurations.compile.incoming.artifactView {
                         attributes { it.attribute(artifactType, 'size') }
                     }.artifacts
@@ -1563,7 +1704,7 @@ ${getFileSizerBody(fileValue, 'outputs.dir(', 'outputs.file(')}
         """
     }
 
-    def withClassesSizeTransform(boolean useParameterObject = false) {
+    def withClassesSizeTransform(boolean useParameterObject = true) {
         """
             allprojects {
                 dependencies {
@@ -1645,7 +1786,7 @@ ${getFileSizerBody(fileValue, 'outputs.dir(', 'outputs.file(')}
     }
 
     Set<TestFile> projectOutputDirs(String from, String to, Closure<String> stream = { output }) {
-        def parts = [Pattern.quote(temporaryFolder.getTestDirectory().absolutePath) + ".*", "build", "transforms", "\\w+"]
+        def parts = [Pattern.quote(temporaryFolder.getTestDirectory().absolutePath) + ".*", "build", ".transforms", "\\w+"]
         return outputDirs(from, to, parts.join(quotedFileSeparator), stream)
     }
 

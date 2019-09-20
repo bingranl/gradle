@@ -16,23 +16,22 @@
 
 package org.gradle.kotlin.dsl.integration
 
+import okhttp3.HttpUrl
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-
-import org.gradle.test.fixtures.file.LeaksFileHandles
-
+import org.gradle.integtests.fixtures.RepoScriptBlockUtil.jcenterRepository
 import org.gradle.kotlin.dsl.embeddedKotlinVersion
 import org.gradle.kotlin.dsl.fixtures.DeepThought
 import org.gradle.kotlin.dsl.fixtures.LightThought
 import org.gradle.kotlin.dsl.fixtures.ZeroThought
 import org.gradle.kotlin.dsl.fixtures.containsMultiLineString
 import org.gradle.kotlin.dsl.support.normaliseLineSeparators
-
+import org.gradle.test.fixtures.dsl.GradleDsl
+import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.hamcrest.CoreMatchers.allOf
 import org.hamcrest.CoreMatchers.containsString
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
-
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
@@ -182,8 +181,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         requireGradleDistributionOnEmbeddedExecuter()
 
-        val differentKotlinVersion = "1.0.7"
-        val expectedKotlinCompilerVersionString = "1.0.7-release-1"
+        val differentKotlinVersion = "1.3.30"
+        val expectedKotlinCompilerVersionString = "1.3.30"
 
         assertNotEquals(embeddedKotlinVersion, differentKotlinVersion)
 
@@ -192,9 +191,7 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
             buildscript {
-                repositories {
-                    jcenter()
-                }
+                $repositoriesBlock
                 dependencies {
                     classpath(kotlin("gradle-plugin", version = "$differentKotlinVersion"))
                 }
@@ -216,8 +213,6 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                 }
             }
         """)
-
-        executer.expectDeprecationWarning()
 
         assertThat(
             build("print-kotlin-version").output,
@@ -404,7 +399,7 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         withSettings("""
             buildscript {
-                repositories { jcenter() }
+                ${jcenterRepository(GradleDsl.KOTLIN)}
                 dependencies {
                     classpath("org.apache.commons:commons-lang3:3.6")
                 }
@@ -446,33 +441,6 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             allOf(
                 containsString("Target is Settings? false"),
                 containsString("Target is Project? true")))
-    }
-
-    @Test
-    fun `can apply buildSrc plugin to Settings`() {
-
-        withBuildSrc()
-
-        withFile("buildSrc/src/main/groovy/my/SettingsPlugin.groovy", """
-            package my
-
-            import org.gradle.api.*
-            import org.gradle.api.initialization.Settings
-
-            class SettingsPlugin implements Plugin<Settings> {
-                void apply(Settings settings) {
-                    println("Settings plugin applied!")
-                }
-            }
-        """)
-
-        withSettings("""
-            apply<my.SettingsPlugin>()
-        """)
-
-        assertThat(
-            build("help").output,
-            containsString("Settings plugin applied!"))
     }
 
     @Test
@@ -640,7 +608,7 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             server.enqueue(MockResponse().setBody(remoteScript))
             server.start()
 
-            val remoteScriptUrl = server.url("/remote.gradle.kts")
+            val remoteScriptUrl = server.safeUrl("/remote.gradle.kts")
 
             withBuildScript("""
                 apply(from = "$remoteScriptUrl")
@@ -650,6 +618,16 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
             assert(build().output.contains("*42*"))
         }
+    }
+
+    private
+    fun MockWebServer.safeUrl(path: String, scheme: String = "http"): HttpUrl? {
+        return HttpUrl.Builder()
+            .scheme(scheme)
+            .host("127.0.0.1")
+            .port(port)
+            .build()
+            .resolve(path)
     }
 
     @Test
@@ -858,6 +836,24 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
         assertThat(
             build("-q", "test").output.trim(),
             equalTo("default-value")
+        )
+    }
+
+    @Test
+    fun `can apply script plugin with package name`() {
+
+        withFile("gradle/script.gradle.kts", """
+            package gradle
+            task("ok") { doLast { println("ok!") } }
+        """)
+
+        withBuildScript("""
+            apply(from = "gradle/script.gradle.kts")
+        """)
+
+        assertThat(
+            build("-q", "ok").output.trim(),
+            equalTo("ok!")
         )
     }
 }

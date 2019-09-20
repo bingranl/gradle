@@ -27,7 +27,7 @@ import spock.lang.Unroll
 import java.util.jar.Manifest
 
 import static org.gradle.util.TestPrecondition.KOTLIN_SCRIPT
-import static org.hamcrest.Matchers.equalTo
+import static org.hamcrest.CoreMatchers.equalTo
 import static org.junit.Assert.assertThat
 
 @Requires(KOTLIN_SCRIPT)
@@ -38,6 +38,7 @@ class SamplesJavaQuickstartIntegrationTest extends AbstractIntegrationSpec {
 
     def setup() {
         executer.withRepositoryMirrors()
+        executer.expectDeprecationWarning()
     }
 
     @Unroll

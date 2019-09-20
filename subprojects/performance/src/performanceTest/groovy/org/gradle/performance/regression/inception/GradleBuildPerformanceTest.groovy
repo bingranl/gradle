@@ -18,12 +18,11 @@ package org.gradle.performance.regression.inception
 import org.gradle.api.internal.tasks.DefaultTaskContainer
 import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
 import org.gradle.performance.categories.PerformanceRegressionTest
-import org.gradle.performance.fixture.BuildExperimentRunner
 import org.gradle.performance.fixture.BuildExperimentSpec
-import org.gradle.performance.fixture.CrossBuildPerformanceTestRunner
+import org.gradle.performance.fixture.CrossBuildGradleInternalPerformanceTestRunner
 import org.gradle.performance.fixture.GradleBuildExperimentSpec
+import org.gradle.performance.fixture.GradleInternalBuildExperimentRunner
 import org.gradle.performance.fixture.GradleSessionProvider
-import org.gradle.performance.fixture.PerformanceTestConditions
 import org.gradle.performance.results.BaselineVersion
 import org.gradle.performance.results.CrossBuildPerformanceResults
 import org.gradle.performance.results.CrossBuildResultsStore
@@ -33,12 +32,11 @@ import org.junit.Rule
 import org.junit.experimental.categories.Category
 import org.junit.rules.TestName
 import spock.lang.AutoCleanup
-import spock.lang.Retry
 import spock.lang.Shared
 import spock.lang.Specification
 
 import static org.gradle.performance.regression.inception.GradleInceptionPerformanceTest.extraGradleBuildArguments
-import static spock.lang.Retry.Mode.SETUP_FEATURE_CLEANUP
+
 /**
  * Test Gradle's build performance against current Gradle.
  *
@@ -54,7 +52,6 @@ import static spock.lang.Retry.Mode.SETUP_FEATURE_CLEANUP
  */
 @Category(PerformanceRegressionTest)
 @CleanupTestDirectory
-@Retry(condition = { PerformanceTestConditions.whenSlowerButNotAdhoc(failure) }, mode = SETUP_FEATURE_CLEANUP, count = 2)
 class GradleBuildPerformanceTest extends Specification {
 
     @Rule
@@ -69,14 +66,15 @@ class GradleBuildPerformanceTest extends Specification {
     @Shared
     def resultStore = new CrossBuildResultsStore()
 
-    CrossBuildPerformanceTestRunner runner
+    CrossBuildGradleInternalPerformanceTestRunner runner
 
     def warmupBuilds = 20
     def measuredBuilds = 20
 
     def setup() {
-        runner = new CrossBuildPerformanceTestRunner(
-            new BuildExperimentRunner(new GradleSessionProvider(buildContext)),
+        runner = new CrossBuildGradleInternalPerformanceTestRunner(
+            new GradleInternalBuildExperimentRunner(new GradleSessionProvider(buildContext)),
+            resultStore,
             resultStore,
             buildContext) {
 
@@ -108,7 +106,6 @@ class GradleBuildPerformanceTest extends Specification {
             invocationCount measuredBuilds
             invocation {
                 tasksToRun("help")
-                useDaemon()
             }
         }
 
@@ -120,7 +117,6 @@ class GradleBuildPerformanceTest extends Specification {
             invocationCount measuredBuilds
             invocation {
                 tasksToRun("help")
-                useDaemon()
             }
         }
 
@@ -157,7 +153,6 @@ class GradleBuildPerformanceTest extends Specification {
                 // Force tasks to be realized even if they were created with the lazy API.
                 args("-D" + DefaultTaskContainer.EAGERLY_CREATE_LAZY_TASKS_PROPERTY + "=true")
                 tasksToRun("help")
-                useDaemon()
             }
         }
 
@@ -169,7 +164,6 @@ class GradleBuildPerformanceTest extends Specification {
             invocationCount measuredBuilds
             invocation {
                 tasksToRun("help")
-                useDaemon()
             }
         }
 

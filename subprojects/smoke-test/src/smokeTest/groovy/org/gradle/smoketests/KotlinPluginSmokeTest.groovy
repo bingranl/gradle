@@ -16,65 +16,77 @@
 
 package org.gradle.smoketests
 
+import org.gradle.integtests.fixtures.android.AndroidHome
+import org.gradle.testkit.runner.BuildResult
 import org.gradle.util.Requires
 import spock.lang.Unroll
 
-import static org.gradle.smoketests.AndroidPluginsSmokeTest.assertAndroidHomeSet
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 import static org.gradle.util.TestPrecondition.KOTLIN_SCRIPT
 
 class KotlinPluginSmokeTest extends AbstractSmokeTest {
+
     @Unroll
-    def 'kotlin #version plugin'() {
+    def 'kotlin #version plugin, workers=#workers'() {
         given:
         useSample("kotlin-example")
         replaceVariablesInBuildFile(kotlinVersion: version)
 
         when:
-        def result = runner('run').forwardOutput().build()
+        def result = build(workers, 'run')
 
         then:
         result.task(':compileKotlin').outcome == SUCCESS
 
         where:
-        version << TestedVersions.kotlin
+        [version, workers] << [TestedVersions.kotlin.versions, [true, false]].combinations()
     }
 
     @Unroll
-    def 'kotlin android #androidPluginVersion plugin'() {
+    def 'kotlin #kotlinPluginVersion android #androidPluginVersion plugins, workers=#workers'() {
         given:
-        assertAndroidHomeSet()
+        AndroidHome.assertIsSet()
         useSample("android-kotlin-example")
         replaceVariablesInBuildFile(
-            kotlinVersion: TestedVersions.kotlin.latest(),
+            kotlinVersion: kotlinPluginVersion,
             androidPluginVersion: androidPluginVersion,
             androidBuildToolsVersion: TestedVersions.androidTools)
 
         when:
-        def build = runner('clean', 'testDebugUnitTestCoverage').forwardOutput().build()
+        def result = build(workers, 'clean', 'testDebugUnitTestCoverage')
 
         then:
-        build.task(':testDebugUnitTestCoverage').outcome == SUCCESS
+        result.task(':testDebugUnitTestCoverage').outcome == SUCCESS
 
         where:
-        androidPluginVersion << TestedVersions.androidGradle
+        [kotlinPluginVersion, androidPluginVersion, workers] << [
+            TestedVersions.kotlin.versions,
+            TestedVersions.androidGradle.versions,
+            [true, false]
+        ].combinations()
     }
 
     @Unroll
     @Requires(KOTLIN_SCRIPT)
-    def 'kotlin js #version plugin'() {
+    def 'kotlin js #version plugin, workers=#workers'() {
         given:
         useSample("kotlin-js-sample")
         withKotlinBuildFile()
         replaceVariablesInBuildFile(kotlinVersion: version)
 
         when:
-        def result = runner('compileKotlin2Js').forwardOutput().build()
+        def result = build(workers, 'compileKotlin2Js')
 
         then:
         result.task(':compileKotlin2Js').outcome == SUCCESS
 
         where:
-        version << TestedVersions.kotlin
+        [version, workers] << [TestedVersions.kotlin.versions, [true, false]].combinations()
+    }
+
+    private BuildResult build(boolean workers, String... tasks) {
+        return runner(tasks + ["--parallel", "-Pkotlin.parallel.tasks.in.project=$workers"] as String[])
+            .forwardOutput()
+            .build()
     }
 }

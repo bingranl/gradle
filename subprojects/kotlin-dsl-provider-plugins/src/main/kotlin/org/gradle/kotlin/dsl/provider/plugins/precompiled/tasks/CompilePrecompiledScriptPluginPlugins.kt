@@ -16,11 +16,16 @@
 
 package org.gradle.kotlin.dsl.provider.plugins.precompiled.tasks
 
+import org.gradle.api.DefaultTask
 import org.gradle.api.file.Directory
-import org.gradle.api.internal.AbstractTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileCollection
+import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.CacheableTask
+import org.gradle.api.tasks.CompileClasspath
 import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -28,24 +33,36 @@ import org.gradle.api.tasks.TaskAction
 
 import org.gradle.kotlin.dsl.execution.scriptDefinitionFromTemplate
 
+import org.gradle.kotlin.dsl.provider.plugins.precompiled.HashedClassPath
+
 import org.gradle.kotlin.dsl.support.KotlinPluginsBlock
 import org.gradle.kotlin.dsl.support.compileKotlinScriptModuleTo
 
 
 @CacheableTask
-open class CompilePrecompiledScriptPluginPlugins : ClassPathSensitiveTask() {
+abstract class CompilePrecompiledScriptPluginPlugins : DefaultTask(), SharedAccessorsPackageAware {
+
+    @get:Internal
+    internal
+    lateinit var hashedClassPath: HashedClassPath
+
+    @get:CompileClasspath
+    val classPathFiles: FileCollection
+        get() = hashedClassPath.classPathFiles
 
     @get:OutputDirectory
-    var outputDir = directoryProperty()
+    abstract val outputDir: DirectoryProperty
 
-    @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:InputFiles
-    val sourceFiles = sourceDirectorySet(
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val sourceFiles: SourceDirectorySet = project.objects.sourceDirectorySet(
         "precompiled-script-plugin-plugins",
         "Precompiled script plugin plugins"
     )
 
-    fun sourceDir(dir: Provider<Directory>) = sourceFiles.srcDir(dir)
+    fun sourceDir(dir: Provider<Directory>) {
+        sourceFiles.srcDir(dir)
+    }
 
     @TaskAction
     fun compile() {
@@ -67,8 +84,3 @@ open class CompilePrecompiledScriptPluginPlugins : ClassPathSensitiveTask() {
         }
     }
 }
-
-
-internal
-fun AbstractTask.implicitImportsForPrecompiledScriptPlugins() =
-    project.implicitImports() + "gradle.kotlin.dsl.plugins.*" // TODO:kotlin-dsl read this value from GenerateExternalPluginSpecBuilder

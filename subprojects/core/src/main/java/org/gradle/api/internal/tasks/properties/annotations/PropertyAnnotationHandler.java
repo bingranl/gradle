@@ -15,11 +15,13 @@
  */
 package org.gradle.api.internal.tasks.properties.annotations;
 
+import com.google.common.collect.ImmutableSet;
 import org.gradle.api.internal.tasks.properties.BeanPropertyContext;
 import org.gradle.api.internal.tasks.properties.PropertyValue;
 import org.gradle.api.internal.tasks.properties.PropertyVisitor;
-import org.gradle.internal.reflect.ParameterValidationContext;
+import org.gradle.internal.reflect.AnnotationCategory;
 import org.gradle.internal.reflect.PropertyMetadata;
+import org.gradle.internal.reflect.WorkValidationContext;
 
 import java.lang.annotation.Annotation;
 
@@ -31,10 +33,13 @@ import java.lang.annotation.Annotation;
 public interface PropertyAnnotationHandler {
     /**
      * The annotation type which this handler is responsible for.
-     *
-     * @return The annotation.
      */
     Class<? extends Annotation> getAnnotationType();
+
+    /**
+     * The modifier annotations allowed for the handled property type. This set can further be restricted by the actual work type.
+     */
+    ImmutableSet<? extends AnnotationCategory> getAllowedModifiers();
 
     /**
      * Does this handler do something useful with the properties that match it? Or can these properties be ignored?
@@ -56,5 +61,5 @@ public interface PropertyAnnotationHandler {
     /**
      * Visits problems associated with the given property, if any.
      */
-    void validatePropertyMetadata(PropertyMetadata propertyMetadata, ParameterValidationContext visitor);
+    void validatePropertyMetadata(PropertyMetadata propertyMetadata, WorkValidationContext visitor);
 }

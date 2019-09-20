@@ -16,20 +16,14 @@
 
 package codegen
 
-import org.gradle.api.DefaultTask
-import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
-
 import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.OutputFile
-import org.gradle.api.tasks.TaskAction
+
+import java.io.File
 
 
 @Suppress("unused")
-abstract class GenerateKotlinDependencyExtensions : DefaultTask() {
-
-    @get:OutputFile
-    abstract val outputFile: RegularFileProperty
+abstract class GenerateKotlinDependencyExtensions : CodeGenerationTask() {
 
     @get:Input
     abstract val embeddedKotlinVersion: Property<String>
@@ -37,12 +31,29 @@ abstract class GenerateKotlinDependencyExtensions : DefaultTask() {
     @get:Input
     abstract val kotlinDslPluginsVersion: Property<String>
 
-    @Suppress("unused")
-    @TaskAction
-    fun generate() {
-        val kotlinDslPluginsVersion = this.kotlinDslPluginsVersion.get()
-        val embeddedKotlinVersion = this.embeddedKotlinVersion.get()
-        outputFile.get().asFile.writeText(
+    override fun File.writeFiles() {
+
+        val kotlinDslPluginsVersion = kotlinDslPluginsVersion.get()
+        val embeddedKotlinVersion = embeddedKotlinVersion.get()
+
+        // IMPORTANT: kotlinDslPluginsVersion should NOT be made a `const` to avoid inlining
+        writeFile(
+            "org/gradle/kotlin/dsl/support/KotlinDslPlugins.kt",
+            """$licenseHeader
+
+package org.gradle.kotlin.dsl.support
+
+
+/**
+ * Expected version of the `kotlin-dsl` plugin for the running Gradle version.
+ */
+@Suppress("unused")
+val expectedKotlinDslPluginsVersion: String
+    get() = "$kotlinDslPluginsVersion"
+""")
+
+        writeFile(
+            "org/gradle/kotlin/dsl/KotlinDependencyExtensions.kt",
             """$licenseHeader
 
 package org.gradle.kotlin.dsl
@@ -96,8 +107,6 @@ fun PluginDependenciesSpec.kotlin(module: String): PluginDependencySpec =
  *
  * Equivalent to `id("org.gradle.kotlin.embedded-kotlin") version "$kotlinDslPluginsVersion"`
  *
- * You can also use `` `embedded-kotlin` version "$kotlinDslPluginsVersion" `` if you want to use a different version.
- *
  * @see org.gradle.kotlin.dsl.plugins.embedded.EmbeddedKotlinPlugin
  */
 val PluginDependenciesSpec.`embedded-kotlin`: PluginDependencySpec
@@ -108,8 +117,6 @@ val PluginDependenciesSpec.`embedded-kotlin`: PluginDependencySpec
  * The `kotlin-dsl` plugin.
  *
  * Equivalent to `id("org.gradle.kotlin.kotlin-dsl") version "$kotlinDslPluginsVersion"`
- *
- * You can also use `` `kotlin-dsl` version "$kotlinDslPluginsVersion" `` if you want to use a different version.
  *
  * @see org.gradle.kotlin.dsl.plugins.dsl.KotlinDslPlugin
  */
@@ -122,8 +129,6 @@ val PluginDependenciesSpec.`kotlin-dsl`: PluginDependencySpec
  *
  * Equivalent to `id("org.gradle.kotlin.kotlin-dsl.base") version "$kotlinDslPluginsVersion"`
  *
- * You can also use `` `kotlin-dsl-base` version "$kotlinDslPluginsVersion" `` if you want to use a different version.
- *
  * @see org.gradle.kotlin.dsl.plugins.base.KotlinDslBasePlugin
  */
 val PluginDependenciesSpec.`kotlin-dsl-base`: PluginDependencySpec
@@ -135,8 +140,6 @@ val PluginDependenciesSpec.`kotlin-dsl-base`: PluginDependencySpec
  *
  * Equivalent to `id("org.gradle.kotlin.kotlin-dsl.precompiled-script-plugins") version "$kotlinDslPluginsVersion"`
  *
- * You can also use `` `kotlin-dsl-precompiled-script-plugins` version "$kotlinDslPluginsVersion" `` if you want to use a different version.
- *
  * @see org.gradle.kotlin.dsl.plugins.precompiled.PrecompiledScriptPlugins
  */
 val PluginDependenciesSpec.`kotlin-dsl-precompiled-script-plugins`: PluginDependencySpec
@@ -144,21 +147,3 @@ val PluginDependenciesSpec.`kotlin-dsl-precompiled-script-plugins`: PluginDepend
 """)
     }
 }
-
-
-internal
-const val licenseHeader = """/*
- * Copyright 2018 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */"""

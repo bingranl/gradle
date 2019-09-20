@@ -43,12 +43,12 @@ import org.gradle.internal.jvm.inspection.JvmVersionDetector;
 import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.logging.services.DefaultLoggingManagerFactory;
 import org.gradle.internal.logging.services.LoggingServiceRegistry;
-import org.gradle.internal.logging.sink.ConsoleStateUtil;
+import org.gradle.internal.nativeintegration.console.TestOverrideConsoleDetector;
 import org.gradle.internal.nativeintegration.services.NativeServices;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.ServiceRegistryBuilder;
 import org.gradle.internal.service.scopes.GlobalScopeServices;
-import org.gradle.launcher.cli.CommandLineActionFactory;
+import org.gradle.launcher.cli.DefaultCommandLineActionFactory;
 import org.gradle.launcher.daemon.configuration.DaemonBuildOptions;
 import org.gradle.process.internal.streams.SafeStreams;
 import org.gradle.test.fixtures.file.TestDirectoryProvider;
@@ -484,6 +484,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
         if (isUseDaemon() && !gradleInvocation.buildJvmArgs.isEmpty()) {
             // Pass build JVM args through to daemon via system property on the launcher JVM
             String quotedArgs = join(" ", collect(gradleInvocation.buildJvmArgs, new Transformer<String, String>() {
+                @Override
                 public String transform(String input) {
                     return String.format("'%s'", input);
                 }
@@ -771,6 +772,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
         return this;
     }
 
+    @Override
     public GradleExecuter withStacktraceDisabled() {
         showStacktrace = false;
         return this;
@@ -1012,10 +1014,10 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
         }
 
         if (interactive) {
-            properties.put(ConsoleStateUtil.INTERACTIVE_TOGGLE, "true");
+            properties.put(TestOverrideConsoleDetector.INTERACTIVE_TOGGLE, "true");
         }
 
-        properties.put(CommandLineActionFactory.WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY, Boolean.toString(renderWelcomeMessage));
+        properties.put(DefaultCommandLineActionFactory.WELCOME_MESSAGE_ENABLED_SYSTEM_PROPERTY, Boolean.toString(renderWelcomeMessage));
 
         return properties;
     }
@@ -1053,6 +1055,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
             if (errorsShouldAppearOnStdout()) {
                 result = new ErrorsOnStdoutScrapingExecutionResult(result);
             }
+            afterExecute.execute(this);
             return result;
         } finally {
             finished();
@@ -1060,11 +1063,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
     }
 
     protected void finished() {
-        try {
-            afterExecute.execute(this);
-        } finally {
-            reset();
-        }
+        reset();
     }
 
     @Override
@@ -1077,6 +1076,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
             if (errorsShouldAppearOnStdout()) {
                 executionFailure = new ErrorsOnStdoutScrapingExecutionFailure(executionFailure);
             }
+            afterExecute.execute(this);
             return executionFailure;
         } finally {
             finished();
@@ -1198,7 +1198,7 @@ public abstract class AbstractGradleExecuter implements GradleExecuter {
                     if (line.matches(".*use(s)? or override(s)? a deprecated API\\.")) {
                         // A javac warning, ignore
                         i++;
-                    } else if (line.matches("w: .* is deprecated\\..*")) {
+                    } else if (line.matches(".*w: .* is deprecated\\..*")) {
                         // A kotlinc warning, ignore
                         i++;
                     } else if (isDeprecationMessageInHelpDescription(line)) {

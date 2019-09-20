@@ -20,29 +20,15 @@ import org.gradle.process.JavaForkOptions;
 import org.gradle.process.internal.JavaForkOptionsFactory;
 import org.gradle.process.internal.JavaForkOptionsInternal;
 
-import java.io.File;
-import java.util.Collections;
-
 public class DaemonForkOptionsBuilder {
     private final JavaForkOptionsInternal javaForkOptions;
     private final JavaForkOptionsFactory forkOptionsFactory;
-    private Iterable<File> classpath = Collections.emptyList();
-    private Iterable<String> sharedPackages = Collections.emptyList();
     private KeepAliveMode keepAliveMode = KeepAliveMode.DAEMON;
+    private ClassLoaderStructure classLoaderStructure = null;
 
     public DaemonForkOptionsBuilder(JavaForkOptionsFactory forkOptionsFactory) {
         this.forkOptionsFactory = forkOptionsFactory;
-        javaForkOptions = forkOptionsFactory.newJavaForkOptions();
-    }
-
-    public DaemonForkOptionsBuilder classpath(Iterable<File> classpath) {
-        this.classpath = classpath;
-        return this;
-    }
-
-    public DaemonForkOptionsBuilder sharedPackages(Iterable<String> sharedPackages) {
-        this.sharedPackages = sharedPackages;
-        return this;
+        this.javaForkOptions = forkOptionsFactory.newJavaForkOptions();
     }
 
     public DaemonForkOptionsBuilder keepAliveMode(KeepAliveMode keepAliveMode) {
@@ -55,8 +41,13 @@ public class DaemonForkOptionsBuilder {
         return this;
     }
 
+    public DaemonForkOptionsBuilder withClassLoaderStructure(ClassLoaderStructure classLoaderStructure) {
+        this.classLoaderStructure = classLoaderStructure;
+        return this;
+    }
+
     public DaemonForkOptions build() {
-        return new DaemonForkOptions(buildJavaForkOptions(), classpath, sharedPackages, keepAliveMode);
+        return new DaemonForkOptions(buildJavaForkOptions(), keepAliveMode, classLoaderStructure);
     }
 
     private JavaForkOptionsInternal buildJavaForkOptions() {

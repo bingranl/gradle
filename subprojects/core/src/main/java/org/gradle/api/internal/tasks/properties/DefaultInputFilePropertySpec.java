@@ -38,6 +38,7 @@ public class DefaultInputFilePropertySpec extends AbstractFilePropertySpec imple
         return skipWhenEmpty;
     }
 
+    @Override
     public boolean isIncremental() {
         return incremental;
     }
@@ -45,6 +46,6 @@ public class DefaultInputFilePropertySpec extends AbstractFilePropertySpec imple
     @Override
     @Nullable
     public Object getValue() {
-        return value.call();
+        return value.getUnprocessedValue();
     }
 }

@@ -17,7 +17,6 @@ package org.gradle.api.tasks;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.SourceDirectorySet;
 import org.gradle.api.plugins.ExtensionAware;
@@ -25,10 +24,13 @@ import org.gradle.api.plugins.ExtensionAware;
 import javax.annotation.Nullable;
 
 /**
- * A {@code SourceSet} represents a logical group of Java source and resources.
+ * A {@code SourceSet} represents a logical group of Java source and resource files. They
+ * are covered in more detail in the
+ * <a href="https://docs.gradle.org/current/userguide/building_java_projects.html#sec:java_source_sets">user manual</a>.
  * <p>
- * See the example below how {@link SourceSet} 'main' is accessed and how the {@link SourceDirectorySet} 'java'
- * is configured to exclude some package from compilation.
+ * The following example shows how you can configure the 'main' source set, which in this
+ * case involves excluding classes whose package begins 'some.unwanted.package' from
+ * compilation of the source files in the 'java' {@link SourceDirectorySet}:
  *
  * <pre class='autoTested'>
  * apply plugin: 'java'
@@ -83,7 +85,6 @@ public interface SourceSet extends ExtensionAware {
      * @return The annotation processor path. Never returns null.
      * @since 4.6
      */
-    @Incubating
     FileCollection getAnnotationProcessorPath();
 
     /**
@@ -95,7 +96,6 @@ public interface SourceSet extends ExtensionAware {
      * @param annotationProcessorPath The annotation processor path. Should not be null.
      * @since 4.6
      */
-    @Incubating
     void setAnnotationProcessorPath(FileCollection annotationProcessorPath);
 
     /**
@@ -246,13 +246,17 @@ public interface SourceSet extends ExtensionAware {
     /**
      * Returns the name of the compile configuration for this source set.
      * @return The configuration name
+     * @deprecated Use {@link #getImplementationConfigurationName()}, {@link #getApiConfigurationName()}, {@link #getCompileClasspathConfigurationName()} or {@link #getApiElementsConfigurationName()} instead.
      */
+    @Deprecated
     String getCompileConfigurationName();
 
     /**
      * Returns the name of the runtime configuration for this source set.
      * @return The runtime configuration name
+     * @deprecated Use {@link #getRuntimeOnlyConfigurationName()}, {@link #getRuntimeClasspathConfigurationName()} or {@link #getRuntimeElementsConfigurationName()} instead.
      */
+    @Deprecated
     String getRuntimeConfigurationName();
 
     /**
@@ -278,7 +282,6 @@ public interface SourceSet extends ExtensionAware {
      * @return the name of the annotation processor configuration.
      * @since 4.6
      */
-    @Incubating
     String getAnnotationProcessorConfigurationName();
 
     /**

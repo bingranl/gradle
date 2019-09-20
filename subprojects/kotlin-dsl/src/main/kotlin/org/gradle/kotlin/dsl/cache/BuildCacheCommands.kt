@@ -20,9 +20,6 @@ import org.gradle.caching.BuildCacheKey
 import org.gradle.caching.internal.controller.BuildCacheLoadCommand
 import org.gradle.caching.internal.controller.BuildCacheStoreCommand
 import org.gradle.caching.internal.origin.OriginMetadata
-
-import org.gradle.internal.id.UniqueId
-
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -40,6 +37,8 @@ class ScriptBuildCacheKey(
     override fun getDisplayName(): String = displayName
 
     override fun getHashCode(): String = cacheKey
+
+    override fun toByteArray(): ByteArray = throw UnsupportedOperationException()
 
     override fun toString(): String = cacheKey
 }
@@ -59,12 +58,12 @@ internal
 class LoadDirectory(
     private val directory: File,
     private val cacheKey: BuildCacheKey,
-    private val currentBuildInvocationId: UniqueId
+    private val currentBuildInvocationId: String
 ) : BuildCacheLoadCommand<OriginMetadata> {
 
     override fun getKey(): BuildCacheKey = cacheKey
 
-    override fun load(inputStream: InputStream): BuildCacheLoadCommand.Result<OriginMetadata>? {
+    override fun load(inputStream: InputStream): BuildCacheLoadCommand.Result<OriginMetadata> {
 
         val (metadata, entryCount) = unpack(inputStream, directory)
 

@@ -32,6 +32,7 @@ import org.gradle.kotlin.dsl.fixtures.bytecode.internalName
 import org.gradle.kotlin.dsl.fixtures.bytecode.publicClass
 import org.gradle.kotlin.dsl.fixtures.bytecode.publicDefaultConstructor
 import org.gradle.kotlin.dsl.fixtures.bytecode.publicMethod
+import org.gradle.kotlin.dsl.fixtures.containsMultiLineString
 import org.gradle.kotlin.dsl.fixtures.normalisedPath
 import org.gradle.kotlin.dsl.fixtures.pluginDescriptorEntryFor
 import org.gradle.kotlin.dsl.support.zipTo
@@ -39,16 +40,15 @@ import org.gradle.kotlin.dsl.support.zipTo
 import org.gradle.test.fixtures.file.LeaksFileHandles
 
 import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers.allOf
-import org.hamcrest.Matchers.containsString
-import org.hamcrest.Matchers.empty
-import org.hamcrest.Matchers.equalTo
-import org.hamcrest.Matchers.not
+import org.hamcrest.CoreMatchers.allOf
+import org.hamcrest.CoreMatchers.containsString
+import org.hamcrest.CoreMatchers.equalTo
 
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.psi.psiUtil.toVisibility
 import org.jetbrains.kotlin.psi.psiUtil.visibilityModifierType
+import org.junit.Assert.assertTrue
 
 import org.junit.Test
 
@@ -57,6 +57,29 @@ import java.io.File
 
 @LeaksFileHandles("Kotlin Compiler Daemon working directory")
 class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest() {
+
+    @Test
+    fun `fails the build with help message for plugin spec with version`() {
+
+        withDefaultSettings().appendText("""
+            rootProject.name = "invalid-plugin"
+        """)
+
+        withKotlinDslPlugin()
+
+        withPrecompiledKotlinScript("invalid-plugin.gradle.kts", """
+            plugins {
+                id("a.plugin") version "1.0"
+            }
+        """)
+
+        assertThat(
+            buildFailureOutput("assemble"),
+            containsMultiLineString("""
+                Invalid plugin request [id: 'a.plugin', version: '1.0']. Plugin requests from precompiled scripts must not include a version number. Please remove the version from the offending request and make sure the module containing the requested plugin 'a.plugin' is an implementation dependency of root project 'invalid-plugin'.
+            """)
+        )
+    }
 
     @Test
     fun `can use type-safe accessors with same name but different meaning in sibling plugins`() {
@@ -272,9 +295,8 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
                 .filter { it.isFile }
                 .toList()
 
-        assertThat(
-            generatedSourceFiles,
-            not(empty())
+        assertTrue(
+            generatedSourceFiles.isNotEmpty()
         )
 
         data class Declaration(
@@ -377,7 +399,7 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
 
         withKotlinDslPlugin().appendText("""
             dependencies {
-                compile("com.github.jruby-gradle:jruby-gradle-plugin:1.4.0")
+                implementation("com.github.jruby-gradle:jruby-gradle-plugin:1.4.0")
             }
         """)
 
@@ -429,17 +451,34 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
     @Test
     fun `can use plugin spec builders in multi-project builds with local and external plugins`() {
 
+        testPluginSpecBuildersInMultiProjectBuildWithPluginsFromPackage(null)
+    }
+
+    @Test
+    fun `can use plugin spec builders in multi-project builds with local and external plugins sharing package name`() {
+
+        testPluginSpecBuildersInMultiProjectBuildWithPluginsFromPackage("p")
+    }
+
+    private
+    fun testPluginSpecBuildersInMultiProjectBuildWithPluginsFromPackage(packageName: String?) {
+
+        val packageDeclaration = packageName?.let { "package $it" } ?: ""
+        val packageQualifier = packageName?.let { "$it." } ?: ""
+
         withProjectRoot(newDir("external-plugins")) {
             withFolders {
                 "external-foo" {
                     withKotlinDslPlugin()
                     withFile("src/main/kotlin/external-foo.gradle.kts", """
+                        $packageDeclaration
                         println("*external-foo applied*")
                     """)
                 }
                 "external-bar" {
                     withKotlinDslPlugin()
                     withFile("src/main/kotlin/external-bar.gradle.kts", """
+                        $packageDeclaration
                         println("*external-bar applied*")
                     """)
                 }
@@ -457,7 +496,8 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
             "buildSrc" {
                 "local-foo" {
                     withFile("src/main/kotlin/local-foo.gradle.kts", """
-                        plugins { `external-foo` }
+                        $packageDeclaration
+                        plugins { $packageQualifier`external-foo` }
                     """)
                     withKotlinDslPlugin().appendText("""
                         dependencies {
@@ -467,7 +507,8 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
                 }
                 "local-bar" {
                     withFile("src/main/kotlin/local-bar.gradle.kts", """
-                        plugins { `external-bar` }
+                        $packageDeclaration
+                        plugins { $packageQualifier`external-bar` }
                     """)
                     withKotlinDslPlugin().appendText("""
                         dependencies {
@@ -481,7 +522,7 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
                 withFile("build.gradle.kts", """
                     dependencies {
                         subprojects.forEach {
-                            runtime(project(it.path))
+                            runtimeOnly(project(it.path))
                         }
                     }
                 """)
@@ -489,8 +530,8 @@ class PrecompiledScriptPluginAccessorsTest : AbstractPrecompiledScriptPluginTest
         }
         withBuildScript("""
             plugins {
-                `local-foo`
-                `local-bar`
+                $packageQualifier`local-foo`
+                $packageQualifier`local-bar`
             }
         """)
 

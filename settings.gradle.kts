@@ -19,6 +19,8 @@ import org.gradle.api.internal.FeaturePreviews
 apply(from = "gradle/shared-with-buildSrc/build-cache-configuration.settings.gradle.kts")
 apply(from = "gradle/shared-with-buildSrc/mirrors.settings.gradle.kts")
 
+include("instantExecution")
+include("instantExecutionReport")
 include("apiMetadata")
 include("distributionsDependencies")
 include("distributions")
@@ -32,6 +34,7 @@ include("dependencyManagement")
 include("wrapper")
 include("cli")
 include("launcher")
+include("bootstrap")
 include("messaging")
 include("resources")
 include("resourcesHttp")
@@ -43,9 +46,7 @@ include("scala")
 include("ide")
 include("ideNative")
 include("idePlay")
-include("osgi")
 include("maven")
-include("announce")
 include("codeQuality")
 include("antlr")
 include("toolingApi")
@@ -62,7 +63,6 @@ include("internalAndroidPerformanceTesting")
 include("performance")
 include("buildScanPerformance")
 include("javascript")
-include("buildComparison")
 include("reporting")
 include("diagnostics")
 include("publish")
@@ -100,7 +100,9 @@ include("persistentCache")
 include("buildCache")
 include("coreApi")
 include("versionControl")
+include("fileCollections")
 include("files")
+include("hashing")
 include("snapshots")
 include("architectureTest")
 include("buildCachePackaging")
@@ -114,6 +116,8 @@ include("kotlinDslToolingModels")
 include("kotlinDslToolingBuilders")
 include("kotlinDslTestFixtures")
 include("kotlinDslIntegTests")
+include("workerProcesses")
+include("pineapple")
 
 val upperCaseLetters = "\\p{Upper}".toRegex()
 
@@ -122,38 +126,13 @@ fun String.toKebabCase() =
 
 rootProject.name = "gradle"
 
-// List of subprojects that have a Groovy DSL build script.
+// List of sub-projects that have a Groovy DSL build script.
 // The intent is for this list to diminish until it disappears.
-val groovyBuildScriptProjects = listOf(
+val groovyBuildScriptProjects = hashSetOf(
     "distributions",
-    "process-services",
-    "wrapper",
-    "resources",
-    "resources-http",
-    "resources-gcs",
-    "resources-s3",
-    "resources-sftp",
-    "plugins",
-    "scala",
-    "osgi",
     "docs",
-    "signing",
-    "native",
-    "performance",
-    "reporting",
-    "publish",
-    "platform-base",
-    "platform-jvm",
-    "plugin-use",
-    "testing-base",
-    "testing-jvm",
-    "testing-junit-platform",
-    "platform-play",
-    "test-kit",
-    "soak",
-    "smoke-test",
-    "persistent-cache",
-    "version-control")
+    "performance"
+)
 
 fun buildFileNameFor(projectDirName: String) =
     "$projectDirName${buildFileExtensionFor(projectDirName)}"
@@ -165,11 +144,11 @@ for (project in rootProject.children) {
     val projectDirName = project.name.toKebabCase()
     project.projectDir = file("subprojects/$projectDirName")
     project.buildFileName = buildFileNameFor(projectDirName)
-    if (!project.projectDir.isDirectory) {
-        throw IllegalArgumentException("Project directory ${project.projectDir} for project ${project.name} does not exist.")
+    require(project.projectDir.isDirectory) {
+        "Project directory ${project.projectDir} for project ${project.name} does not exist."
     }
-    if (!project.buildFile.isFile) {
-        throw IllegalArgumentException("Build file ${project.buildFile} for project ${project.name} does not exist.")
+    require(project.buildFile.isFile) {
+        "Build file ${project.buildFile} for project ${project.name} does not exist."
     }
 }
 
@@ -180,13 +159,10 @@ pluginManagement {
     }
 }
 
-val ignoredFeatures = setOf(
-    // we don't want to publish Gradle metadata to public repositories until the format is stable.
-    FeaturePreviews.Feature.GRADLE_METADATA
-)
+val ignoredFeatures = setOf<FeaturePreviews.Feature>()
 
 FeaturePreviews.Feature.values().forEach { feature ->
-    if (feature.isActive && !ignoredFeatures.contains(feature)) {
+    if (feature.isActive && feature !in ignoredFeatures) {
         enableFeaturePreview(feature.name)
     }
 }

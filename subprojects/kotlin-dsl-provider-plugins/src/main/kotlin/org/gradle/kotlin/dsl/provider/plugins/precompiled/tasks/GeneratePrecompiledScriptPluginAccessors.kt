@@ -17,10 +17,10 @@
 package org.gradle.kotlin.dsl.provider.plugins.precompiled.tasks
 
 import org.gradle.api.Project
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.artifacts.dependencies.DefaultSelfResolvingDependency
 import org.gradle.api.internal.file.FileCollectionFactory
-import org.gradle.api.internal.file.FileCollectionInternal
 import org.gradle.api.internal.initialization.ScriptHandlerInternal
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.tasks.CacheableTask
@@ -36,8 +36,9 @@ import org.gradle.groovy.scripts.TextResourceScriptSource
 import org.gradle.initialization.ClassLoaderScopeRegistry
 import org.gradle.internal.classpath.DefaultClassPath
 import org.gradle.internal.concurrent.CompositeStoppable.stoppable
+import org.gradle.internal.exceptions.LocationAwareException
 import org.gradle.internal.hash.HashCode
-import org.gradle.internal.resource.BasicTextResourceLoader
+import org.gradle.internal.resource.DefaultTextFileResourceLoader
 
 import org.gradle.kotlin.dsl.accessors.AccessorFormats
 import org.gradle.kotlin.dsl.accessors.TypedProjectSchema
@@ -58,6 +59,7 @@ import org.gradle.kotlin.dsl.support.KotlinScriptType
 import org.gradle.kotlin.dsl.support.serviceOf
 
 import org.gradle.plugin.management.internal.DefaultPluginRequests
+import org.gradle.plugin.management.internal.PluginRequestInternal
 import org.gradle.plugin.management.internal.PluginRequests
 
 import org.gradle.plugin.use.PluginDependenciesSpec
@@ -72,17 +74,17 @@ import java.nio.file.Files
 
 
 @CacheableTask
-open class GeneratePrecompiledScriptPluginAccessors : ClassPathSensitiveCodeGenerationTask() {
+abstract class GeneratePrecompiledScriptPluginAccessors : ClassPathSensitiveCodeGenerationTask() {
 
     @get:Classpath
     lateinit var runtimeClassPathFiles: FileCollection
 
     @get:OutputDirectory
-    var metadataOutputDir = directoryProperty()
+    abstract val metadataOutputDir: DirectoryProperty
 
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    var compiledPluginsBlocksDir = directoryProperty()
+    abstract val compiledPluginsBlocksDir: DirectoryProperty
 
     @get:Internal
     internal
@@ -188,13 +190,33 @@ open class GeneratePrecompiledScriptPluginAccessors : ClassPathSensitiveCodeGene
             return null
         }
 
+        val pluginRequests = collectPluginRequestsOf(plugin)
+        validatePluginRequestsOf(plugin, pluginRequests)
         return ScriptPluginPlugins(
             plugin,
-            collectPluginRequestsOf(plugin).map {
-                // TODO:kotlin-dsl validate plugin request version, apply false, etc
-                it.id.id
-            }
+            pluginRequests.map { it.id.id }
         )
+    }
+
+    private
+    fun validatePluginRequestsOf(plugin: PrecompiledScriptPlugin, requests: PluginRequests) {
+        val validationErrors = requests.mapNotNull { validationErrorFor(it) }
+        if (validationErrors.isNotEmpty()) {
+            throw LocationAwareException(
+                IllegalArgumentException(validationErrors.joinToString("\n")),
+                plugin.scriptFile.path,
+                requests.first().lineNumber
+            )
+        }
+    }
+
+    private
+    fun validationErrorFor(pluginRequest: PluginRequestInternal): String? {
+        if (pluginRequest.version != null) {
+            return "Invalid plugin request $pluginRequest. Plugin requests from precompiled scripts must not include a version number. Please remove the version from the offending request and make sure the module containing the requested plugin '${pluginRequest.id}' is an implementation dependency of $project."
+        }
+        // TODO:kotlin-dsl validate apply false
+        return null
     }
 
     private
@@ -216,7 +238,7 @@ open class GeneratePrecompiledScriptPluginAccessors : ClassPathSensitiveCodeGene
     private
     fun scriptSourceFor(plugin: PrecompiledScriptPlugin) =
         TextResourceScriptSource(
-            BasicTextResourceLoader().loadFile("Precompiled script plugin", plugin.scriptFile)
+            DefaultTextFileResourceLoader().loadFile("Precompiled script plugin", plugin.scriptFile)
         )
 
     private
@@ -301,7 +323,7 @@ open class GeneratePrecompiledScriptPluginAccessors : ClassPathSensitiveCodeGene
             hashedSchema.schema,
             classPath,
             sourceCodeOutputDir.get().asFile,
-            temporaryDir.resolve("accessors"),
+            null,
             hashedSchema.packageName,
             AccessorFormats.internal
         )
@@ -370,7 +392,7 @@ class SyntheticProjectSchemaBuilder(
             DefaultSelfResolvingDependency(
                 project
                     .serviceOf<FileCollectionFactory>()
-                    .fixed("precompiled-script-plugins-accessors-classpath", rootProjectClassPath) as FileCollectionInternal
+                    .fixed("precompiled-script-plugins-accessors-classpath", rootProjectClassPath)
             )
         )
     }
@@ -380,7 +402,7 @@ class SyntheticProjectSchemaBuilder(
         val targetProjectScope = (project as ProjectInternal).classLoaderScope
         project.serviceOf<PluginRequestApplicator>().applyPlugins(
             pluginRequests,
-            project.buildscript as ScriptHandlerInternal,
+            project.buildscript,
             project.pluginManager,
             targetProjectScope
         )

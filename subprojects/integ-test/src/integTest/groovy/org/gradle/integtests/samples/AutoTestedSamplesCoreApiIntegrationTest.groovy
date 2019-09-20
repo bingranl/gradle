@@ -20,14 +20,21 @@ import org.gradle.integtests.fixtures.AbstractAutoTestedSamplesTest
 import org.junit.Test
 
 class AutoTestedSamplesCoreApiIntegrationTest extends AbstractAutoTestedSamplesTest {
+    @Override
+    void beforeSample() {
+        executer.noDeprecationChecks()
+    }
 
     @Test
     void runSamples() {
-        file('subprojects/abc').createDir() //for example in Settings.java
+        // for example in Settings.java
+        file('subprojects/abc').createDir()
+
         // for example in DependencySubstitutions.java
         file("settings.gradle") << """
             include 'api', 'util'
         """
+
         runSamplesFrom("subprojects/core-api/src/main/java")
     }
 }

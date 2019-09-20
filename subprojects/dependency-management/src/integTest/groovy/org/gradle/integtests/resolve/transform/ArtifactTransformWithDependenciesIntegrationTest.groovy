@@ -25,7 +25,7 @@ import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.CompileClasspath
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
-import org.hamcrest.Matchers
+import org.hamcrest.CoreMatchers
 import spock.lang.IgnoreIf
 import spock.lang.Unroll
 
@@ -112,9 +112,10 @@ abstract class TestTransform implements TransformAction<Parameters> {
     abstract FileCollection getInputArtifactDependencies()
 
     @InputArtifact
-    abstract File getInput()
+    abstract Provider<FileSystemLocation> getInputArtifact()
 
     void transform(TransformOutputs outputs) {
+        def input = inputArtifact.get().asFile
         println "\${parameters.transformName} received dependencies files \${inputArtifactDependencies*.name} for processing \${input.name}"
         assert inputArtifactDependencies.every { it.exists() }
 
@@ -129,9 +130,10 @@ abstract class TestTransform implements TransformAction<Parameters> {
 abstract class SimpleTransform implements TransformAction<TransformParameters.None> {
 
     @InputArtifact
-    abstract File getInput()
+    abstract Provider<FileSystemLocation> getInputArtifact()
 
     void transform(TransformOutputs outputs) {
+        def input = inputArtifact.get().asFile
         def output = outputs.file(input.name + ".txt")
         def workspace = output.parentFile
         assert workspace.directory && workspace.list().length == 0
@@ -420,9 +422,10 @@ abstract class NoneTransform implements TransformAction<TransformParameters.None
     abstract FileCollection getInputArtifactDependencies()
 
     @InputArtifact
-    abstract File getInput()
+    abstract Provider<FileSystemLocation> getInputArtifact()
 
     void transform(TransformOutputs outputs) {
+        def input = inputArtifact.get().asFile
         println "Single step transform received dependencies files \${inputArtifactDependencies*.name} for processing \${input.name}"
 
         def output = outputs.file(input.name + ".txt")
@@ -516,9 +519,10 @@ abstract class ClasspathTransform implements TransformAction<TransformParameters
     abstract FileCollection getInputArtifactDependencies()
 
     @InputArtifact
-    abstract File getInput()
+    abstract Provider<FileSystemLocation> getInputArtifact()
 
     void transform(TransformOutputs outputs) {
+        def input = inputArtifact.get().asFile
         println "Single step transform received dependencies files \${inputArtifactDependencies*.name} for processing \${input.name}"
 
         def output = outputs.file(input.name + ".txt")
@@ -671,7 +675,7 @@ abstract class ClasspathTransform implements TransformAction<TransformParameters
         assertTransformationsExecuted()
         failure.assertResolutionFailure(":app:implementation")
         failure.assertHasFailures(1)
-        failure.assertThatCause(Matchers.containsString("Could not find unknown:not-found:4.3"))
+        failure.assertThatCause(CoreMatchers.containsString("Could not find unknown:not-found:4.3"))
     }
 
     def "transform does not execute when dependencies cannot be downloaded"() {
@@ -695,7 +699,7 @@ abstract class ClasspathTransform implements TransformAction<TransformParameters
         then:
         failure.assertResolutionFailure(":app:implementation")
         failure.assertHasFailures(1)
-        failure.assertThatCause(Matchers.containsString("Could not download cant-be-downloaded-4.3.jar (test:cant-be-downloaded:4.3)"))
+        failure.assertThatCause(CoreMatchers.containsString("Could not download cant-be-downloaded-4.3.jar (test:cant-be-downloaded:4.3)"))
 
         assertTransformationsExecuted(
             transformStep1('common.jar'),
@@ -719,7 +723,7 @@ abstract class ClasspathTransform implements TransformAction<TransformParameters
         then:
         failure.assertResolutionFailure(":app:implementation")
         failure.assertHasFailures(1)
-        failure.assertThatCause(Matchers.containsString("Failed to transform artifact 'slf4j-api-1.7.25.jar (org.slf4j:slf4j-api:1.7.25)'"))
+        failure.assertThatCause(CoreMatchers.containsString("Failed to transform slf4j-api-1.7.25.jar (org.slf4j:slf4j-api:1.7.25)"))
 
         assertTransformationsExecuted(
             simpleTransform('common.jar'),

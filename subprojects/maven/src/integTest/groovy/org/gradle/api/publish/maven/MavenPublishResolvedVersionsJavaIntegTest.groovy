@@ -16,7 +16,7 @@
 
 package org.gradle.api.publish.maven
 
-
+import org.gradle.api.attributes.Category
 import org.gradle.integtests.fixtures.publish.maven.AbstractMavenPublishIntegTest
 import org.gradle.test.fixtures.maven.MavenJavaModule
 import spock.lang.Unroll
@@ -55,6 +55,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         run "publish"
 
         then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
         javaLibrary.assertPublished()
         javaLibrary.parsedModuleMetadata.variant("apiElements") {
             dependency("org.test:foo:1.0") {
@@ -73,29 +74,39 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         }
 
         and:
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
+
+        and:
         resolveArtifacts(javaLibrary) {
-            expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                // With Maven, can't have different versions for a dependency between compile and runtime
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
         }
 
         and:
         resolveApiArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveRuntimeArtifacts(javaLibrary) {
-            expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
         }
 
         where:
         [apiMapping, runtimeMapping] << ([
-                [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)"), apiJarsUsingUsage(), apiJarsUsingUsage("fromResolutionOf('compileClasspath')"), apiJarsUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
-                [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)"), runtimeJarsUsingUsage(), runtimeJarsUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeJarsUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
+                [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
+                [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
         ].combinations() + [[allVariants(), noop()]])
     }
 
@@ -130,6 +141,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         run "publish"
 
         then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
         javaLibrary.assertPublished()
         javaLibrary.parsedModuleMetadata.variant("apiElements") {
             dependency("org.test:foo:1.0") {
@@ -148,29 +160,40 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         }
 
         and:
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
+
+        and:
         resolveArtifacts(javaLibrary) {
-            expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                // With Maven, can't have different versions for a dependency between compile and runtime
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
         }
 
         and:
         resolveApiArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveRuntimeArtifacts(javaLibrary) {
-            expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            withModuleMetadata {
+                expectFiles "bar-1.1.jar", "foo-1.1.jar", "publishTest-1.9.jar"
+            }
+            withoutModuleMetadata {
+                // With Maven, can't have different versions for a dependency between compile and runtime
+                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
+            }
         }
 
         where:
         [apiMapping, runtimeMapping] << ([
-                [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)"), apiJarsUsingUsage(), apiJarsUsingUsage("fromResolutionOf('compileClasspath')"), apiJarsUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
-                [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)"), runtimeJarsUsingUsage(), runtimeJarsUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeJarsUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
+                [apiUsingUsage(), apiUsingUsage("fromResolutionOf('compileClasspath')"), apiUsingUsage("fromResolutionOf(project.configurations.compileClasspath)")],
+                [runtimeUsingUsage(), runtimeUsingUsage("fromResolutionOf('runtimeClasspath')"), runtimeUsingUsage("fromResolutionOf(project.configurations.runtimeClasspath)")],
         ].combinations() + [[allVariants(), noop()]])
     }
 
@@ -212,6 +235,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         run "publish"
 
         then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
         javaLibrary.assertPublished()
         javaLibrary.parsedModuleMetadata.variant("apiElements") {
             dependency("org.test:foo:1.0") {
@@ -230,33 +254,22 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         }
 
         and:
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
+
+        and:
         resolveArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveApiArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveRuntimeArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         where:
@@ -298,6 +311,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         run "publish"
 
         then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
         javaLibrary.assertPublished()
         javaLibrary.parsedModuleMetadata.variant("apiElements") {
             constraint("org.test:bar:1.1") {
@@ -329,33 +343,22 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         }
 
         and:
+        javaLibrary.parsedPom.scopes.compile.assertDependsOn('org.test:foo:1.0')
+        javaLibrary.parsedPom.scopes.runtime.assertDependsOn('org.test:bar:1.1')
+
+        and:
         resolveArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveApiArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveRuntimeArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "bar-1.1.jar", "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         where:
@@ -395,6 +398,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         run "publish"
 
         then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
         javaLibrary.assertPublished()
         javaLibrary.parsedModuleMetadata.variant("apiElements") {
             constraint("org.test:bar:[1.0, 2.0[") {
@@ -424,32 +428,17 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
 
         and:
         resolveArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveApiArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
         and:
         resolveRuntimeArtifacts(javaLibrary) {
-            withModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
-            withoutModuleMetadata {
-                expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
-            }
+            expectFiles "foo-1.0.jar", "publishTest-1.9.jar"
         }
 
     }
@@ -457,8 +446,12 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
     // This test documents the existing behavior, not necessarily the best one
     def "import scope makes use of runtime classpath"() {
         javaLibrary(mavenRepo.module("org.test", "foo", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata().publish()
-        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org.test", "bar", "1.0")).withModuleMetadata()
+            .withVariant('api') { attribute(Category.CATEGORY_ATTRIBUTE.name, Category.REGULAR_PLATFORM) }
+            .withVariant('runtime') { attribute(Category.CATEGORY_ATTRIBUTE.name, Category.REGULAR_PLATFORM) }.publish()
+        javaLibrary(mavenRepo.module("org.test", "bar", "1.1")).withModuleMetadata()
+            .withVariant('api') { attribute(Category.CATEGORY_ATTRIBUTE.name, Category.REGULAR_PLATFORM) }
+            .withVariant('runtime') { attribute(Category.CATEGORY_ATTRIBUTE.name, Category.REGULAR_PLATFORM) }.publish()
 
         given:
         createBuildScripts("""
@@ -486,6 +479,7 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         run "publish"
 
         then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
         javaLibrary.assertPublished()
         javaLibrary.parsedModuleMetadata.variant("apiElements") {
             constraint("org.test:bar:1.0") {
@@ -524,6 +518,145 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
         }
     }
 
+    // This is a weird test case, because why would you have a substitution rule
+    // for a first level dependency? However it may be that you implicitly get a
+    // substitution rule (via a plugin for example) that you are not aware of.
+    // Ideally we should warn when such things happen (linting).
+    @Unroll
+    def "substituted dependencies are also substituted in the generated POM file"() {
+        javaLibrary(mavenRepo.module("org", "foo", "1.0")).withModuleMetadata().publish()
+        javaLibrary(mavenRepo.module("org", "bar", "1.0"))
+            .dependsOn("org", "baz", "1.0")
+            .withModuleMetadata()
+            .publish()
+        javaLibrary(mavenRepo.module("org", "baz", "1.0")).withModuleMetadata().publish()
+
+        given:
+        createBuildScripts("""
+            dependencies {
+                implementation 'org:foo:1.0'
+                implementation 'org:bar:1.0'
+            }
+
+            $substitution
+            
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        versionMapping {
+                            ${apiUsingUsage()}
+                            ${runtimeUsingUsage()}
+                        }
+                    }
+            
+                }
+            }
+        """)
+
+        when:
+        run "publish"
+
+        then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
+        javaLibrary.assertPublished()
+        javaLibrary.parsedPom.scope("runtime") {
+            assert dependencies.size() == 2
+            def deps = dependencies.values()
+            assert deps[0].artifactId == 'baz' // because of substitution
+            assert deps[1].artifactId == 'bar'
+        }
+        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
+            dependency("org", "baz", "1.0")
+            dependency("org", "bar", "1.0")
+            noMoreDependencies()
+        }
+
+        where:
+        substitution << [
+                """
+            dependencies {
+                modules {
+                    module("org:foo") {
+                        replacedBy("org:baz")
+                    }
+                }
+            }""",
+            """
+            configurations.all {
+                resolutionStrategy.eachDependency { details ->
+                    if (details.requested.name == 'foo') {
+                        details.useTarget("org:baz:1.0")
+                    }
+                }
+            }
+            """,
+                """
+            configurations.all {
+                resolutionStrategy.dependencySubstitution {
+                    substitute(module('org:foo')).with(module('org:baz:1.0'))
+                }
+            }
+            """
+        ]
+    }
+
+    def "can substitute with a project dependency"() {
+        given:
+        settingsFile << """
+            include 'lib'
+        """
+        createBuildScripts("""
+            dependencies {
+                implementation 'org:foo:1.0'
+            }
+
+            configurations.all {
+                resolutionStrategy.dependencySubstitution {
+                    substitute(module('org:foo')) with(project(':lib'))
+                }
+            }
+            
+            publishing {
+                publications {
+                    maven(MavenPublication) {
+                        from components.java
+                        versionMapping {
+                            ${apiUsingUsage()}
+                            ${runtimeUsingUsage()}
+                        }
+                    }
+            
+                }
+            }
+        """)
+
+        file("lib/build.gradle") << """
+            apply plugin: 'java-library'
+            
+            group = 'com.acme'
+            version = '1.45'
+        """
+
+        when:
+        run "publish"
+
+        then:
+        javaLibrary.mavenModule.removeGradleMetadataRedirection()
+        javaLibrary.assertPublished()
+        javaLibrary.parsedPom.scope("runtime") {
+            assert dependencies.size() == 1
+            def dep = dependencies.values()[0]
+            assert dep.groupId == 'com.acme'
+            assert dep.artifactId == 'lib'
+            assert dep.version == '1.45'
+        }
+        javaLibrary.parsedModuleMetadata.variant("runtimeElements") {
+            dependency("com.acme", "lib", "1.45")
+            noMoreDependencies()
+        }
+    }
+
     private static String allVariants() {
         " allVariants { fromResolutionResult() } "
     }
@@ -532,14 +665,6 @@ class MavenPublishResolvedVersionsJavaIntegTest extends AbstractMavenPublishInte
 
     private static String apiUsingUsage(String config = "fromResolutionResult()") {
         """ usage("java-api") { $config } """
-    }
-
-    private static String apiJarsUsingUsage(String config = "fromResolutionResult()") {
-        """ usage("java-api-jars") { $config } """
-    }
-
-    private static String runtimeJarsUsingUsage(String config = "fromResolutionResult()") {
-        """ usage("java-runtime-jars") { $config } """
     }
 
     private static String runtimeUsingUsage(String config = "fromResolutionResult()") {

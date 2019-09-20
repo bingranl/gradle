@@ -598,9 +598,11 @@ class CompositeBuildConfigurationAttributesResolveIntegrationTest extends Abstra
         failure.assertHasCause("Could not resolve com.acme.external:external:1.0.")
         failure.assertHasCause("""Unable to find a matching variant of project :external:
   - Variant 'bar' capability com.acme.external:external:2.0-SNAPSHOT:
-      - Required flavor 'free' and found incompatible value 'blue'.
+      - Incompatible attribute:
+          - Required flavor 'free' and found incompatible value 'blue'.
   - Variant 'foo' capability com.acme.external:external:2.0-SNAPSHOT:
-      - Required flavor 'free' and found incompatible value 'red'.""")
+      - Incompatible attribute:
+          - Required flavor 'free' and found incompatible value 'red'.""")
 
         when:
         fails ':a:checkPaid'
@@ -612,9 +614,11 @@ class CompositeBuildConfigurationAttributesResolveIntegrationTest extends Abstra
   - foo
 All of them match the consumer attributes:
   - Variant 'bar' capability com.acme.external:external:2.0-SNAPSHOT:
-      - Required flavor 'paid' and found compatible value 'blue'.
+      - Compatible attribute:
+          - Required flavor 'paid' and found compatible value 'blue'.
   - Variant 'foo' capability com.acme.external:external:2.0-SNAPSHOT:
-      - Required flavor 'paid' and found compatible value 'red'.""")
+      - Compatible attribute:
+          - Required flavor 'paid' and found compatible value 'red'.""")
     }
 
     @Unroll("context travels down to transitive dependencies with typed attributes using plugin [#v1, #v2, pluginsDSL=#usePluginsDSL]")
@@ -767,21 +771,24 @@ All of them match the consumer attributes:
             'settings.gradle'('rootProject.name="com.acme.typed-attributes.gradle.plugin"')
             'build.gradle'("""
                 apply plugin: 'groovy'
-                apply plugin: 'maven'
+                apply plugin: 'maven-publish'
 
                 group = 'com.acme.typed-attributes'
                 version = '$version'
 
                 dependencies {
-                    compile localGroovy()
-                    compile gradleApi()
+                    implementation localGroovy()
+                    implementation gradleApi()
                 }
 
-                uploadArchives {
+                publishing {
                     repositories {
-                        mavenDeployer {
-                            repository(url: "${mavenRepo.uri}")
+                        maven {
+                            url "${mavenRepo.uri}"
                         }
+                    }
+                    publications {
+                        maven(MavenPublication) { from components.java }
                     }
                 }
             """)
@@ -821,7 +828,7 @@ All of them match the consumer attributes:
             }
         }
         executer.usingBuildScript(new File(pluginDir, "build.gradle"))
-            .withTasks("uploadArchives")
+            .withTasks("publishMavenPublicationToMavenRepository")
             .run()
     }
 

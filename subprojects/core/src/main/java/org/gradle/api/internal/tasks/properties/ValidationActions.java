@@ -56,6 +56,7 @@ public enum ValidationActions implements ValidationAction {
         @Override
         public void doValidate(String propertyName, Object value, TaskValidationContext context) {
             File directory = toFile(context, value);
+            validateNotInReservedFileSystemLocation(context, directory);
             if (directory.exists()) {
                 if (!directory.isDirectory()) {
                     context.visitError(String.format("Directory '%s' specified for property '%s' is not a directory.", directory, propertyName));
@@ -82,6 +83,7 @@ public enum ValidationActions implements ValidationAction {
         @Override
         public void doValidate(String propertyName, Object value, TaskValidationContext context) {
             File file = toFile(context, value);
+            validateNotInReservedFileSystemLocation(context, file);
             if (file.exists()) {
                 if (file.isDirectory()) {
                     context.visitError(String.format("Cannot write to file '%s' specified for property '%s' as it is a directory.", file, propertyName));
@@ -105,6 +107,12 @@ public enum ValidationActions implements ValidationAction {
             }
         }
     };
+
+    private static void validateNotInReservedFileSystemLocation(TaskValidationContext context, File location) {
+        if (context.isInReservedFileSystemLocation(location)) {
+            context.visitError(String.format("The output %s must not be in a reserved location.", location));
+        }
+    }
 
     private final String targetType;
 
@@ -131,7 +139,7 @@ public enum ValidationActions implements ValidationAction {
     }
 
     private static File toFile(TaskValidationContext context, Object value) {
-        return context.getResolver().resolve(value);
+        return context.getFileOperations().file(value);
     }
 
     private static Iterable<? extends File> toFiles(TaskValidationContext context, Object value) {
@@ -140,7 +148,7 @@ public enum ValidationActions implements ValidationAction {
         } else if (value instanceof FileCollection) {
             return (FileCollection) value;
         } else {
-            return context.getResolver().resolveFiles(value);
+            return context.getFileOperations().immutableFiles(value);
         }
     }
 }

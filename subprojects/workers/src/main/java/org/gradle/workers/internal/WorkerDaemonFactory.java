@@ -16,7 +16,7 @@
 
 package org.gradle.workers.internal;
 
-import net.jcip.annotations.ThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.BuildOperationRef;
 import org.gradle.workers.IsolationMode;
@@ -35,7 +35,7 @@ public class WorkerDaemonFactory implements WorkerFactory {
     }
 
     @Override
-    public Worker getWorker(final DaemonForkOptions forkOptions) {
+    public BuildOperationAwareWorker getWorker(final DaemonForkOptions forkOptions) {
         return new AbstractWorker(buildOperationExecutor) {
             @Override
             public DefaultWorkResult execute(ActionExecutionSpec spec, BuildOperationRef parentBuildOperation) {

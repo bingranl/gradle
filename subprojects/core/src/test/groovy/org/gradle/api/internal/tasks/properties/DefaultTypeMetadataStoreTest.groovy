@@ -17,19 +17,21 @@
 package org.gradle.api.internal.tasks.properties
 
 import org.gradle.api.DefaultTask
-import org.gradle.api.ReplacedBy
 import org.gradle.api.Task
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.AbstractTask
 import org.gradle.api.internal.ConventionTask
 import org.gradle.api.internal.DynamicObjectAware
 import org.gradle.api.internal.HasConvention
 import org.gradle.api.internal.IConventionAware
-import org.gradle.api.internal.tasks.properties.annotations.ClasspathPropertyAnnotationHandler
 import org.gradle.api.internal.tasks.properties.annotations.PropertyAnnotationHandler
 import org.gradle.api.internal.tasks.properties.annotations.TypeAnnotationHandler
+import org.gradle.api.model.ReplacedBy
 import org.gradle.api.plugins.ExtensionAware
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.CompileClasspath
 import org.gradle.api.tasks.Console
 import org.gradle.api.tasks.Destroys
 import org.gradle.api.tasks.Input
@@ -38,13 +40,15 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.LocalState
+import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.OutputDirectories
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.OutputFiles
 import org.gradle.cache.internal.TestCrossBuildInMemoryCacheFactory
-import org.gradle.internal.reflect.ParameterValidationContext
 import org.gradle.internal.reflect.PropertyMetadata
+import org.gradle.internal.reflect.WorkValidationContext
+import org.gradle.internal.reflect.annotations.impl.DefaultTypeAnnotationMetadataStore
 import org.gradle.internal.scripts.ScriptOrigin
 import org.gradle.internal.service.ServiceRegistryBuilder
 import org.gradle.internal.service.scopes.ExecutionGlobalServices
@@ -56,19 +60,33 @@ import spock.lang.Unroll
 import javax.inject.Inject
 import java.lang.annotation.Annotation
 
+import static ModifierAnnotationCategory.NORMALIZATION
+
 class DefaultTypeMetadataStoreTest extends Specification {
 
-    private static final List<Class<? extends Annotation>> PROCESSED_PROPERTY_TYPE_ANNOTATIONS = [
-        InputFile, InputFiles, InputDirectory, OutputFile, OutputDirectory, OutputFiles, OutputDirectories, Destroys, LocalState
+    static final PROCESSED_PROPERTY_TYPE_ANNOTATIONS = [
+        Input, InputFile, InputFiles, InputDirectory, Nested, OutputFile, OutputDirectory, OutputFiles, OutputDirectories, Destroys, LocalState
     ]
 
-    private static final List<Class<? extends Annotation>> UNPROCESSED_PROPERTY_TYPE_ANNOTATIONS = [
+    static final UNPROCESSED_PROPERTY_TYPE_ANNOTATIONS = [
         Console, Internal, ReplacedBy
     ]
 
     @Shared GroovyClassLoader groovyClassLoader
     def services = ServiceRegistryBuilder.builder().provider(new ExecutionGlobalServices()).build()
-    def metadataStore = new DefaultTypeMetadataStore(services.getAll(PropertyAnnotationHandler), [] as Set, [] as List, new TestCrossBuildInMemoryCacheFactory())
+    def cacheFactory = new TestCrossBuildInMemoryCacheFactory()
+    def typeAnnotationMetadataStore = new DefaultTypeAnnotationMetadataStore(
+        [CustomCacheable],
+        ModifierAnnotationCategory.asMap((PROCESSED_PROPERTY_TYPE_ANNOTATIONS + [SearchPath]) as Set<Class<? extends Annotation>>),
+        ["java", "groovy"],
+        [DefaultTask],
+        [Object, GroovyObject],
+        [ConfigurableFileCollection, Property],
+        UNPROCESSED_PROPERTY_TYPE_ANNOTATIONS,
+        { false },
+        cacheFactory
+    )
+    def metadataStore = new DefaultTypeMetadataStore([], services.getAll(PropertyAnnotationHandler), [Classpath, CompileClasspath], typeAnnotationMetadataStore, cacheFactory)
 
     def setupSpec() {
         groovyClassLoader = new GroovyClassLoader(getClass().classLoader)
@@ -87,7 +105,7 @@ class DefaultTypeMetadataStoreTest extends Specification {
         _ * annotationHandler.propertyRelevant >> true
         _ * annotationHandler.annotationType >> SearchPath
 
-        def metadataStore = new DefaultTypeMetadataStore([annotationHandler], [] as Set, [] as Set, new TestCrossBuildInMemoryCacheFactory())
+        def metadataStore = new DefaultTypeMetadataStore([], [annotationHandler], [], typeAnnotationMetadataStore, cacheFactory)
 
         when:
         def typeMetadata = metadataStore.getTypeMetadata(TaskWithCustomAnnotation)
@@ -106,11 +124,11 @@ class DefaultTypeMetadataStoreTest extends Specification {
         def annotationHandler = Stub(PropertyAnnotationHandler)
         _ * annotationHandler.propertyRelevant >> true
         _ * annotationHandler.annotationType >> SearchPath
-        _ * annotationHandler.validatePropertyMetadata(_, _) >> { PropertyMetadata metadata, ParameterValidationContext context ->
-            context.visitError(null, metadata.propertyName, "is broken")
+        _ * annotationHandler.validatePropertyMetadata(_, _) >> { PropertyMetadata metadata, WorkValidationContext context ->
+            context.visitWarning(null, metadata.propertyName, "is broken")
         }
 
-        def metadataStore = new DefaultTypeMetadataStore([annotationHandler], [] as Set, [] as Set, new TestCrossBuildInMemoryCacheFactory())
+        def metadataStore = new DefaultTypeMetadataStore([], [annotationHandler], [], typeAnnotationMetadataStore, cacheFactory)
 
         when:
         def typeMetadata = metadataStore.getTypeMetadata(TaskWithCustomAnnotation)
@@ -127,11 +145,11 @@ class DefaultTypeMetadataStoreTest extends Specification {
         def annotationHandler = Stub(PropertyAnnotationHandler)
         _ * annotationHandler.propertyRelevant >> false
         _ * annotationHandler.annotationType >> SearchPath
-        _ * annotationHandler.validatePropertyMetadata(_, _) >> { PropertyMetadata metadata, ParameterValidationContext context ->
-            context.visitError(null, metadata.propertyName, "is broken")
+        _ * annotationHandler.validatePropertyMetadata(_, _) >> { PropertyMetadata metadata, WorkValidationContext context ->
+            context.visitWarning(null, metadata.propertyName, "is broken")
         }
 
-        def metadataStore = new DefaultTypeMetadataStore([annotationHandler], [] as Set, [] as Set, new TestCrossBuildInMemoryCacheFactory())
+        def metadataStore = new DefaultTypeMetadataStore([], [annotationHandler], [], typeAnnotationMetadataStore, cacheFactory)
 
         when:
         def typeMetadata = metadataStore.getTypeMetadata(TaskWithCustomAnnotation)
@@ -143,13 +161,13 @@ class DefaultTypeMetadataStoreTest extends Specification {
     }
 
     def "custom type annotation handler can inspect for static type problems"() {
-        def annotationHandler = Stub(TypeAnnotationHandler)
-        _ * annotationHandler.annotationType >> CustomCacheable
-        _ * annotationHandler.validateTypeMetadata(_, _) >> { Class type, ParameterValidationContext context ->
-            context.visitError("type is broken")
+        def typeAnnotationHandler = Stub(TypeAnnotationHandler)
+        _ * typeAnnotationHandler.annotationType >> CustomCacheable
+        _ * typeAnnotationHandler.validateTypeMetadata(_, _) >> { Class type, WorkValidationContext context ->
+            context.visitWarning("type is broken")
         }
 
-        def metadataStore = new DefaultTypeMetadataStore([], [] as Set, [annotationHandler] as Set, new TestCrossBuildInMemoryCacheFactory())
+        def metadataStore = new DefaultTypeMetadataStore([typeAnnotationHandler], [], [], typeAnnotationMetadataStore, cacheFactory)
 
         when:
         def taskMetadata = metadataStore.getTypeMetadata(DefaultTask)
@@ -253,24 +271,36 @@ class DefaultTypeMetadataStoreTest extends Specification {
     }
 
     class ClasspathPropertyTask extends DefaultTask {
-        @Classpath @InputFiles FileCollection inputFiles1
-        @InputFiles @Classpath FileCollection inputFiles2
+        @Classpath FileCollection classpathOnly
+        @Classpath @InputFiles FileCollection classpathInputFiles
+        @InputFiles @Classpath FileCollection inputFilesClasspath
+    }
+
+    class CompileClasspathPropertyTask extends DefaultTask {
+        @CompileClasspath FileCollection classpathOnly
+        @CompileClasspath @InputFiles FileCollection classpathInputFiles
+        @InputFiles @CompileClasspath FileCollection inputFilesClasspath
     }
 
     // Third-party plugins that need to support Gradle versions both pre- and post-3.2
     // need to declare their @Classpath properties as @InputFiles as well
     @Issue("https://github.com/gradle/gradle/issues/913")
-    def "@Classpath takes precedence over @InputFiles when both are declared on property"() {
-        def metadataStore = new DefaultTypeMetadataStore(services.getAll(PropertyAnnotationHandler) + [new ClasspathPropertyAnnotationHandler()], [] as Set, [] as Set, new TestCrossBuildInMemoryCacheFactory())
-
+    @Unroll
+    def "@#annotation.simpleName is recognized as normalization no matter how it's defined"() {
         when:
-        def typeMetadata = metadataStore.getTypeMetadata(ClasspathPropertyTask)
+        def typeMetadata = metadataStore.getTypeMetadata(sampleType)
 
         then:
         def properties = typeMetadata.propertiesMetadata
-        properties*.propertyName as List == ["inputFiles1", "inputFiles2"]
-        properties*.propertyType as List == [Classpath, Classpath]
+        properties*.propertyName as List == ["classpathInputFiles", "classpathOnly", "inputFilesClasspath"]
+        properties*.propertyType as List == [InputFiles, InputFiles, InputFiles]
+        properties*.getAnnotationForCategory(NORMALIZATION)*.annotationType() as List == [annotation, annotation, annotation]
         collectProblems(typeMetadata).empty
+
+        where:
+        annotation       | sampleType
+        Classpath        | ClasspathPropertyTask
+        CompileClasspath | CompileClasspathPropertyTask
     }
 
     @Unroll
@@ -310,23 +340,37 @@ class DefaultTypeMetadataStoreTest extends Specification {
         properties.propertyName.sort() == ["destroys", "inputDirectory", "inputFile", "inputFiles", "inputString", "outputDirectories", "outputDirectory", "outputFile", "outputFiles", "someCache"]
     }
 
-    static class Unannotated extends DefaultTask {
+    static class TypeWithUnannotatedProperties extends DefaultTask {
         String bad1
         File bad2
-        @Console String notUseful1
-        @Input String useful1
+        @Input String useful
     }
 
-    def "ignores properties that are not annotated or that don't do anything"() {
+    def "warns about and ignores properties that are not annotated"() {
         when:
-        def metadata = metadataStore.getTypeMetadata(Unannotated)
+        def metadata = metadataStore.getTypeMetadata(TypeWithUnannotatedProperties)
 
         then:
-        metadata.propertiesMetadata.propertyName == ["useful1"]
+        metadata.propertiesMetadata.propertyName == ["useful"]
         collectProblems(metadata) == [
             "Property 'bad1' is not annotated with an input or output annotation.",
             "Property 'bad2' is not annotated with an input or output annotation."
         ]
+    }
+
+    static class TypeWithNonRelevantProperties extends DefaultTask {
+        @ReplacedBy("notUseful2") String notUseful1
+        @Console String notUseful2
+        @Input String useful
+    }
+
+    def "ignores properties that are not relevant"() {
+        when:
+        def metadata = metadataStore.getTypeMetadata(TypeWithNonRelevantProperties)
+
+        then:
+        metadata.propertiesMetadata.propertyName == ["useful"]
+        collectProblems(metadata) == []
     }
 
     @SuppressWarnings("GroovyUnusedDeclaration")
@@ -351,7 +395,7 @@ class DefaultTypeMetadataStoreTest extends Specification {
 
     private static List<String> collectProblems(TypeMetadata metadata) {
         def result = []
-        metadata.collectValidationFailures(null, new DefaultParameterValidationContext(result))
+        metadata.collectValidationFailures(null, new DefaultWorkValidationContext(result))
         return result
     }
 

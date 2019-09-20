@@ -33,9 +33,10 @@ import org.gradle.groovy.scripts.TextResourceScriptSource
 
 import org.gradle.internal.classpath.ClassPath
 import org.gradle.internal.classpath.DefaultClassPath
-import org.gradle.internal.resource.BasicTextResourceLoader
+import org.gradle.internal.resource.DefaultTextFileResourceLoader
 import org.gradle.internal.time.Time.startTimer
 
+import org.gradle.kotlin.dsl.*
 import org.gradle.kotlin.dsl.accessors.AccessorsClassPath
 import org.gradle.kotlin.dsl.accessors.pluginSpecBuildersClassPath
 import org.gradle.kotlin.dsl.accessors.projectAccessorsClassPath
@@ -62,7 +63,6 @@ import org.gradle.kotlin.dsl.support.serviceOf
 
 import org.gradle.kotlin.dsl.tooling.models.EditorReport
 import org.gradle.kotlin.dsl.tooling.models.KotlinBuildScriptModel
-import org.gradle.kotlin.dsl.typeOf
 
 import org.gradle.tooling.provider.model.ToolingModelBuilder
 
@@ -71,7 +71,7 @@ import java.io.PrintWriter
 import java.io.Serializable
 import java.io.StringWriter
 
-import java.util.*
+import java.util.EnumSet
 
 
 private
@@ -207,10 +207,13 @@ fun precompiledScriptPluginModelBuilder(
     scriptClassPath = DefaultClassPath.of(enclosingSourceSet.sourceSet.compileClasspath),
     enclosingScriptProjectDir = enclosingSourceSet.project.projectDir,
     additionalImports = {
-        implicitImportsFor(
-            hashOf(scriptFile),
-            enclosingSourceSet.project.precompiledScriptPluginsMetadataDir
-        ) ?: emptyList()
+        enclosingSourceSet.project.precompiledScriptPluginsMetadataDir.run {
+            implicitImportsFrom(
+                resolve("accessors").resolve(hashOf(scriptFile))
+            ) + implicitImportsFrom(
+                resolve("plugin-spec-builders").resolve("implicit-imports")
+            )
+        }
     }
 )
 
@@ -223,11 +226,8 @@ val Project.precompiledScriptPluginsMetadataDir: File
 
 
 private
-fun implicitImportsFor(precompiledScriptPluginHash: String, metadataDir: File): List<String>? =
-    metadataDir
-        .resolve(precompiledScriptPluginHash)
-        .takeIf { it.isFile }
-        ?.readLines()
+fun implicitImportsFrom(file: File): List<String> =
+    file.takeIf { it.isFile }?.readLines() ?: emptyList()
 
 
 private
@@ -290,7 +290,7 @@ fun settingsScriptPluginModelBuilder(scriptFile: File, project: ProjectInternal)
     val (scriptHandler, scriptClassPath) = compilationClassPathForScriptPluginOf(
         target = settings,
         scriptFile = scriptFile,
-        baseScope = settings.rootClassLoaderScope,
+        baseScope = settings.baseClassLoaderScope,
         scriptHandlerFactory = scriptHandlerFactoryOf(gradle),
         project = project,
         resourceDescription = "settings file"
@@ -371,7 +371,7 @@ fun scriptHandlerFactoryOf(gradle: Gradle) =
 
 private
 fun textResourceScriptSource(description: String, scriptFile: File) =
-    TextResourceScriptSource(BasicTextResourceLoader().loadFile(description, scriptFile))
+    TextResourceScriptSource(DefaultTextFileResourceLoader().loadFile(description, scriptFile))
 
 
 private
@@ -452,8 +452,8 @@ val KotlinBuildScriptModelParameter.scriptFile
 
 private
 val Settings.scriptCompilationClassPath
-    get() = serviceOf<KotlinScriptClassPathProvider>().safeCompilationClassPathOf(classLoaderScope) {
-        this as SettingsInternal
+    get() = serviceOf<KotlinScriptClassPathProvider>().safeCompilationClassPathOf(classLoaderScope, false) {
+        (this as SettingsInternal).gradle
     }
 
 
@@ -474,19 +474,22 @@ val Project.scriptCompilationClassPath
 
 private
 fun Project.compilationClassPathOf(classLoaderScope: ClassLoaderScope) =
-    serviceOf<KotlinScriptClassPathProvider>().safeCompilationClassPathOf(classLoaderScope) { settings }
+    serviceOf<KotlinScriptClassPathProvider>().safeCompilationClassPathOf(classLoaderScope, true) {
+        (this as ProjectInternal).gradle
+    }
 
 
 private
 inline fun KotlinScriptClassPathProvider.safeCompilationClassPathOf(
     classLoaderScope: ClassLoaderScope,
-    getSettings: () -> SettingsInternal
+    projectScript: Boolean,
+    getGradle: () -> GradleInternal
 ): ClassPath = try {
     compilationClassPathOf(classLoaderScope)
 } catch (error: Exception) {
-    getSettings().run {
+    getGradle().run {
         serviceOf<ClassPathModeExceptionCollector>().collect(error)
-        compilationClassPathOf(rootClassLoaderScope)
+        compilationClassPathOf(if (projectScript) baseProjectClassLoaderScope() else this.classLoaderScope)
     }
 }
 

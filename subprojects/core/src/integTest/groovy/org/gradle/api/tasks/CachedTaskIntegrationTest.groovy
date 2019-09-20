@@ -58,7 +58,6 @@ class CachedTaskIntegrationTest extends AbstractIntegrationSpec implements Direc
                 outputs.file("out.txt")
                 outputs.cacheIf { true }
                 doLast {
-                    assert state.taskOutputCaching.enabled
                     project.file("out.txt") << "xxx"
                     if (project.hasProperty("fail")) {
                         throw new RuntimeException("Boo!")
@@ -74,12 +73,12 @@ class CachedTaskIntegrationTest extends AbstractIntegrationSpec implements Direc
         when:
         withBuildCache().run "foo"
         then:
-        executedTasks == [":foo"]
+        result.assertTasksExecuted(":foo")
 
         when:
         withBuildCache().run "foo"
         then:
-        skippedTasks as List == [":foo"]
+        skipped ":foo"
     }
 
     def "task is loaded from cache when returning to already cached state after failure"() {
@@ -108,14 +107,29 @@ class CachedTaskIntegrationTest extends AbstractIntegrationSpec implements Direc
         when:
         withBuildCache().run "foo"
         then:
-        skippedTasks as List == [":foo"]
+        skipped ":foo"
+    }
+
+    def "displays info about loading and storing in cache"() {
+        buildFile << defineCacheableTask()
+        when:
+        withBuildCache().run "cacheable", "--info"
+        then:
+        outputContains "Stored cache entry for task ':cacheable' with cache key"
+
+        file("build").deleteDir()
+
+        when:
+        withBuildCache().run "cacheable", "--info"
+        then:
+        outputContains "Loaded cache entry for task ':cacheable' with cache key"
     }
 
     def defineCacheableTask() {
         """
             @CacheableTask
             class CustomTask extends DefaultTask {
-                @OutputDirectory File outputDir = new File(temporaryDir, 'output')
+                @OutputDirectory File outputDir = new File(project.buildDir, 'output')
                 @TaskAction
                 void generate() {
                     new File(outputDir, "output").text = "OK"

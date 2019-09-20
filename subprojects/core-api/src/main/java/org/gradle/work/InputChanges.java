@@ -16,7 +16,9 @@
 
 package org.gradle.work;
 
-import org.gradle.api.Incubating;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileSystemLocation;
+import org.gradle.api.provider.Provider;
 
 /**
  * Provides access to any input files that need to be processed by an incremental work action.
@@ -25,31 +27,28 @@ import org.gradle.api.Incubating;
  * An incremental work action is one that accepts a single {@link InputChanges} parameter.
  * The work action can then query what changed for an input parameter since the last execution to only process the changes.
  *
+ * The following example shows a task which reverses the text in each of its input files.
+ * It demonstrates how to use {@link InputChanges} to only process the changed files.
+ *
  * <pre class='autoTested'>
- * class IncrementalReverseTask extends DefaultTask {
+ * abstract class IncrementalReverseTask extends DefaultTask {
+ *     {@literal @}Incremental
  *     {@literal @}InputDirectory
- *     def File inputDir
+ *     abstract DirectoryProperty getInputDir()
  *
  *     {@literal @}OutputDirectory
- *     def File outputDir
+ *     abstract DirectoryProperty getOutputDir()
  *
  *     {@literal @}TaskAction
  *     void execute(InputChanges inputChanges) {
- *         if (!inputChanges.incremental) {
- *             project.delete(outputDir.listFiles())
- *         }
- *
  *         inputChanges.getFileChanges(inputDir).each { change -&gt;
- *             switch (change.changeType) {
- *                 case REMOVED:
- *                     def targetFile = project.file("$outputDir/${change.file.name}")
- *                     if (targetFile.exists()) {
- *                         targetFile.delete()
- *                     }
- *                     break
- *                 default:
- *                     def targetFile = project.file("$outputDir/${change.file.name}")
- *                     targetFile.text = change.file.text.reverse()
+ *             if (change.fileType == FileType.DIRECTORY) return
+ *
+ *             def targetFile = outputDir.file(change.normalizedPath).get().asFile
+ *             if (change.changeType == ChangeType.REMOVED) {
+ *                 targetFile.delete()
+ *             } else {
+ *                 targetFile.text = change.file.text.reverse()
  *             }
  *         }
  *     }
@@ -58,6 +57,7 @@ import org.gradle.api.Incubating;
  *
  * <p>
  * In the case where Gradle is unable to determine which input files need to be reprocessed, then all of the input files will be reported as {@link ChangeType#ADDED}.
+ * When such a full rebuild happens, the output files of the work are removed prior to executing the work action.
  * Cases where this occurs include:
  * <ul>
  *     <li>There is no history available from a previous execution.</li>
@@ -67,7 +67,6 @@ import org.gradle.api.Incubating;
  *
  * @since 5.4
  */
-@Incubating
 public interface InputChanges {
     /**
      * Indicates if it was possible for Gradle to determine which input files were out of date compared to a previous execution.
@@ -76,13 +75,13 @@ public interface InputChanges {
      * When <code>true</code>:
      * </p>
      * <ul>
-     *     <li>{@link #getFileChanges(Object)} reports changes to the input files compared to the previous execution.</li>
+     *     <li>{@link #getFileChanges(FileCollection)} and {@link #getFileChanges(Provider)} report changes to the input files compared to the previous execution.</li>
      * </ul>
      * <p>
      * When <code>false</code>:
      * </p>
      * <ul>
-     *     <li>Every input file is reported via {@link #getFileChanges(Object)} as if it was {@link ChangeType#ADDED}.</li>
+     *     <li>Every input file is reported via {@link #getFileChanges(FileCollection)} and {@link #getFileChanges(Provider)} as if it was {@link ChangeType#ADDED}.</li>
      * </ul>
      */
     boolean isIncremental();
@@ -93,10 +92,28 @@ public interface InputChanges {
      * <p>When {@link #isIncremental()} is {@code false}, then all elements of the parameter are returned as {@link ChangeType#ADDED}.</p>
      *
      * <p>
-     *     Only input file properties annotated with {@link Incremental} or {@link org.gradle.api.tasks.SkipWhenEmpty} can be queried for changes.
+     *     Only input file properties annotated with {@literal @}{@link Incremental} or {@literal @}{@link org.gradle.api.tasks.SkipWhenEmpty} can be queried for changes.
      * </p>
      *
-     * @param parameterValue The value of the parameter to query.
+     * @param parameter The value of the parameter to query.
      */
-    Iterable<FileChange> getFileChanges(Object parameterValue);
+    Iterable<FileChange> getFileChanges(FileCollection parameter);
+
+    /**
+     * Changes for a parameter.
+     *
+     * <p>When {@link #isIncremental()} is {@code false}, then all elements of the parameter are returned as {@link ChangeType#ADDED}.</p>
+     *
+     * <p>
+     *     This method allows querying properties of type {@link org.gradle.api.file.RegularFileProperty} and {@link org.gradle.api.file.DirectoryProperty} for changes.
+     *     These two types are typically used for {@literal @}{@link org.gradle.api.tasks.InputFile} and {@literal @}{@link org.gradle.api.tasks.InputDirectory} properties.
+     * </p>
+     *
+     * <p>
+     *     Only input file properties annotated with {@literal @}{@link Incremental} or {@literal @}{@link org.gradle.api.tasks.SkipWhenEmpty} can be queried for changes.
+     * </p>
+     *
+     * @param parameter The value of the parameter to query.
+     */
+    Iterable<FileChange> getFileChanges(Provider<? extends FileSystemLocation> parameter);
 }

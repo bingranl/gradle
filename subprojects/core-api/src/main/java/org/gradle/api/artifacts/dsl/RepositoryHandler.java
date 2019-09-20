@@ -17,7 +17,6 @@ package org.gradle.api.artifacts.dsl;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
-import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.ArtifactRepositoryContainer;
 import org.gradle.api.artifacts.repositories.ArtifactRepository;
 import org.gradle.api.artifacts.repositories.FlatDirectoryArtifactRepository;
@@ -87,8 +86,16 @@ public interface RepositoryHandler extends ArtifactRepositoryContainer {
      * @return The Gradle Central Plugin Repository
      * @since 4.4
      */
-    @Incubating
     ArtifactRepository gradlePluginPortal();
+    
+    /**
+     * Adds a repository which looks in Gradle Central Plugin Repository for dependencies.
+     * 
+     * @param action a configuration action
+     * @return the added resolver
+     * @since 5.4
+     */
+    ArtifactRepository gradlePluginPortal(Action<? super ArtifactRepository> action);
 
     /**
      * Adds a repository which looks in Bintray's JCenter repository for dependencies.

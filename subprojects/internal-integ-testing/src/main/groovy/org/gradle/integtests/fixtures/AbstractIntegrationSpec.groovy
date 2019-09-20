@@ -15,8 +15,6 @@
  */
 package org.gradle.integtests.fixtures
 
-import groovy.transform.CompileStatic
-import groovy.transform.TypeCheckingMode
 import org.gradle.api.Action
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.integtests.fixtures.build.BuildTestFixture
@@ -39,7 +37,7 @@ import org.gradle.test.fixtures.ivy.IvyFileRepository
 import org.gradle.test.fixtures.maven.M2Installation
 import org.gradle.test.fixtures.maven.MavenFileRepository
 import org.gradle.test.fixtures.maven.MavenLocalRepository
-import org.gradle.testing.internal.util.Specification
+import spock.lang.Specification
 import org.hamcrest.CoreMatchers
 import org.hamcrest.Matcher
 import org.junit.Rule
@@ -98,8 +96,16 @@ class AbstractIntegrationSpec extends Specification {
         testDirectory.file(getDefaultBuildFileName())
     }
 
+    protected TestFile getBuildKotlinFile() {
+        testDirectory.file(getDefaultBuildKotlinFileName())
+    }
+
     protected String getDefaultBuildFileName() {
         'build.gradle'
+    }
+
+    protected String getDefaultBuildKotlinFileName() {
+        'build.gradle.kts'
     }
 
     protected TestFile buildScript(String script) {
@@ -107,17 +113,14 @@ class AbstractIntegrationSpec extends Specification {
         buildFile
     }
 
-    @CompileStatic
     protected TestFile getSettingsFile() {
         testDirectory.file('settings.gradle')
     }
 
-    @CompileStatic
     protected TestFile getSettingsKotlinFile() {
         testDirectory.file('settings.gradle.kts')
     }
 
-    @CompileStatic
     protected TestFile getPropertiesFile() {
         testDirectory.file('gradle.properties')
     }
@@ -127,7 +130,11 @@ class AbstractIntegrationSpec extends Specification {
     }
 
     def multiProjectBuild(String projectName, List<String> subprojects, @DelegatesTo(BuildTestFile) Closure cl = {}) {
-        buildTestFixture.multiProjectBuild(projectName, subprojects, cl)
+        multiProjectBuild(projectName, subprojects, CompiledLanguage.JAVA, cl)
+    }
+
+    def multiProjectBuild(String projectName, List<String> subprojects, CompiledLanguage language, @DelegatesTo(BuildTestFile) Closure cl = {}) {
+        buildTestFixture.multiProjectBuild(projectName, subprojects, language, cl)
     }
 
     protected TestNameTestDirectoryProvider getTestDirectoryProvider() {
@@ -203,6 +210,20 @@ class AbstractIntegrationSpec extends Specification {
         executer
     }
 
+    /**
+     * This is expensive as it creates a complete copy of the distribution inside the test directory.
+     * Only use this for testing custom modifications of a distribution.
+     */
+    protected GradleExecuter requireIsolatedGradleDistribution() {
+        def isolatedGradleHomeDir = getTestDirectory().file("gradle-home")
+        getBuildContext().gradleHomeDir.copyTo(isolatedGradleHomeDir)
+        distribution = new UnderDevelopmentGradleDistribution(getBuildContext(), isolatedGradleHomeDir)
+        executer = createExecuter()
+        executer.requireGradleDistribution()
+        executer.requireIsolatedDaemons() //otherwise we might connect to a running daemon from the original installation location
+        executer
+    }
+
     AbstractIntegrationSpec withBuildCache() {
         executer.withBuildCacheEnabled()
         this
@@ -211,7 +232,6 @@ class AbstractIntegrationSpec extends Specification {
     /**
      * Synonym for succeeds()
      */
-    @CompileStatic(TypeCheckingMode.SKIP)
     protected ExecutionResult run(String... tasks) {
         succeeds(*tasks)
     }
@@ -237,39 +257,39 @@ class AbstractIntegrationSpec extends Specification {
         result = failure
     }
 
-    protected List<String> getExecutedTasks() {
-        assertHasResult()
-        result.executedTasks
-    }
-
-    protected Set<String> getSkippedTasks() {
-        assertHasResult()
-        result.skippedTasks
-    }
-
-    protected List<String> getNonSkippedTasks() {
-        executedTasks - skippedTasks
-    }
-
     protected void executedAndNotSkipped(String... tasks) {
+        assertHasResult()
         tasks.each {
             result.assertTaskNotSkipped(it)
         }
     }
 
+    protected void noneSkipped() {
+        assertHasResult()
+        result.assertTasksSkipped()
+    }
+
+    protected void allSkipped() {
+        assertHasResult()
+        result.assertTasksNotSkipped()
+    }
+
     protected void skipped(String... tasks) {
+        assertHasResult()
         tasks.each {
             result.assertTaskSkipped(it)
         }
     }
 
     protected void notExecuted(String... tasks) {
+        assertHasResult()
         tasks.each {
             result.assertTaskNotExecuted(it)
         }
     }
 
     protected void executed(String... tasks) {
+        assertHasResult()
         tasks.each {
             result.assertTaskExecuted(it)
         }

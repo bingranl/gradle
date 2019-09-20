@@ -39,6 +39,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer.dispose
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer.newDisposable
+import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar
 
 import org.jetbrains.kotlin.config.AnalysisFlags
 import org.jetbrains.kotlin.config.ApiVersion
@@ -59,7 +60,9 @@ import org.jetbrains.kotlin.name.NameUtils
 
 import org.jetbrains.kotlin.samWithReceiver.CliSamWithReceiverComponentContributor
 
-import org.jetbrains.kotlin.script.KotlinScriptDefinition
+import org.jetbrains.kotlin.scripting.compiler.plugin.ScriptingCompilerConfigurationComponentRegistrar
+import org.jetbrains.kotlin.scripting.configuration.ScriptingConfigurationKeys.SCRIPT_DEFINITIONS
+import org.jetbrains.kotlin.scripting.definitions.ScriptDefinition
 
 import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
@@ -76,7 +79,7 @@ fun compileKotlinScriptModuleTo(
     outputDirectory: File,
     moduleName: String,
     scriptFiles: Collection<String>,
-    scriptDef: KotlinScriptDefinition,
+    scriptDef: ScriptDefinition,
     classPath: Iterable<File>,
     logger: Logger,
     pathTranslation: (String) -> String
@@ -94,7 +97,7 @@ internal
 fun compileKotlinScriptToDirectory(
     outputDirectory: File,
     scriptFile: File,
-    scriptDef: KotlinScriptDefinition,
+    scriptDef: ScriptDefinition,
     classPath: List<File>,
     messageCollector: LoggingMessageCollector
 ): String {
@@ -117,7 +120,7 @@ fun compileKotlinScriptModuleTo(
     outputDirectory: File,
     moduleName: String,
     scriptFiles: Collection<String>,
-    scriptDef: KotlinScriptDefinition,
+    scriptDef: ScriptDefinition,
     classPath: Iterable<File>,
     messageCollector: LoggingMessageCollector
 ) {
@@ -126,10 +129,10 @@ fun compileKotlinScriptModuleTo(
         withCompilationExceptionHandler(messageCollector) {
 
             val configuration = compilerConfigurationFor(messageCollector).apply {
-                put(JVM_TARGET, JVM_1_8)
                 put(RETAIN_OUTPUT_IN_MEMORY, false)
                 put(OUTPUT_DIRECTORY, outputDirectory)
                 setModuleName(moduleName)
+                addScriptingCompilerComponents()
                 addScriptDefinition(scriptDef)
                 scriptFiles.forEach { addKotlinSourceRoot(it) }
                 classPath.forEach { addJvmClasspathRoot(it) }
@@ -295,6 +298,8 @@ private
 fun compilerConfigurationFor(messageCollector: MessageCollector): CompilerConfiguration =
     CompilerConfiguration().apply {
         put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, messageCollector)
+        put(JVMConfigurationKeys.USE_FAST_CLASS_FILES_READING, true)
+        put(JVM_TARGET, JVM_1_8)
         put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS, gradleKotlinDslLanguageVersionSettings)
     }
 
@@ -305,7 +310,8 @@ val gradleKotlinDslLanguageVersionSettings = LanguageVersionSettingsImpl(
     apiVersion = ApiVersion.KOTLIN_1_3,
     specificFeatures = mapOf(
         LanguageFeature.NewInference to LanguageFeature.State.ENABLED,
-        LanguageFeature.SamConversionForKotlinFunctions to LanguageFeature.State.ENABLED
+        LanguageFeature.SamConversionForKotlinFunctions to LanguageFeature.State.ENABLED,
+        LanguageFeature.SamConversionPerArgument to LanguageFeature.State.ENABLED
     ),
     analysisFlags = mapOf(
         AnalysisFlags.skipMetadataVersionCheck to true
@@ -320,8 +326,17 @@ fun CompilerConfiguration.setModuleName(name: String) {
 
 
 private
-fun CompilerConfiguration.addScriptDefinition(scriptDef: KotlinScriptDefinition) {
-    add(JVMConfigurationKeys.SCRIPT_DEFINITIONS, scriptDef)
+fun CompilerConfiguration.addScriptingCompilerComponents() {
+    add(
+        ComponentRegistrar.PLUGIN_COMPONENT_REGISTRARS,
+        ScriptingCompilerConfigurationComponentRegistrar()
+    )
+}
+
+
+private
+fun CompilerConfiguration.addScriptDefinition(scriptDef: ScriptDefinition) {
+    add(SCRIPT_DEFINITIONS, scriptDef)
 }
 
 

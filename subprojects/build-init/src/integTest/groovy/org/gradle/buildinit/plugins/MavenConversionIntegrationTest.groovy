@@ -172,7 +172,7 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
                     }
                 }
             }
-        """.stripIndent().trim(), indent))
+            """.stripIndent().trim(), indent))
         assert text.contains(publishingBlock)
     }
 
@@ -206,7 +206,7 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
                 classifier = 'sources'
                 from(sourceSets.main.allJava)
             }
-        '''.stripIndent().trim()))
+            '''.stripIndent().trim()))
         assertContainsPublishingConfig(buildFile, '', ['sourcesJar'])
 
         when: 'the generated task is executed'
@@ -227,7 +227,7 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
                 classifier = 'tests'
                 from(sourceSets.test.output)
             }
-        '''.stripIndent().trim()))
+            '''.stripIndent().trim()))
         assertContainsPublishingConfig(buildFile, '', ['testsJar'])
 
         when: 'the generated task is executed'
@@ -248,7 +248,7 @@ ${TextUtil.indent(configLines.join("\n"), "                        ")}
                 classifier = 'javadoc'
                 from(javadoc.destinationDir)
             }
-        '''.stripIndent().trim()))
+            '''.stripIndent().trim()))
         assertContainsPublishingConfig(buildFile, '', ['javadocJar'])
 
         when: 'the generated task is executed'
@@ -417,7 +417,7 @@ Root project 'webinar-parent'
         fails 'init', '--dsl', 'kotlin'
 
         then:
-        failure.assertHasCause("The requested DSL 'kotlin' is not supported for 'pom' setup type")
+        failure.assertHasCause("The requested DSL 'kotlin' is not supported for 'pom' build type")
     }
 
     void gradleFilesGenerated(TestFile parentFolder = file(".")) {

@@ -19,10 +19,12 @@ package org.gradle.api.internal.tasks.properties
 import groovy.transform.EqualsAndHashCode
 import org.gradle.api.DefaultTask
 import org.gradle.api.Named
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.file.collections.ImmutableFileCollection
 import org.gradle.api.internal.tasks.properties.annotations.PropertyAnnotationHandler
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Destroys
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
@@ -34,15 +36,19 @@ import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.cache.internal.TestCrossBuildInMemoryCacheFactory
-import org.gradle.internal.reflect.ParameterValidationContext
+import org.gradle.internal.reflect.WorkValidationContext
+import org.gradle.internal.reflect.annotations.impl.DefaultTypeAnnotationMetadataStore
 import org.gradle.internal.service.ServiceRegistryBuilder
 import org.gradle.internal.service.scopes.ExecutionGlobalServices
 import org.gradle.test.fixtures.AbstractProjectBuilderSpec
 
+import static org.gradle.internal.service.scopes.ExecutionGlobalServices.IGNORED_METHOD_ANNOTATIONS
+import static org.gradle.internal.service.scopes.ExecutionGlobalServices.PROPERTY_TYPE_ANNOTATIONS
+
 class DefaultPropertyWalkerTest extends AbstractProjectBuilderSpec {
     def services = ServiceRegistryBuilder.builder().provider(new ExecutionGlobalServices()).build()
     def visitor = Mock(PropertyVisitor)
-    def validationContext = Mock(ParameterValidationContext)
+    def validationContext = Mock(WorkValidationContext)
 
     def "visits properties"() {
         def task = project.tasks.create("myTask", MyTask)
@@ -228,6 +234,19 @@ class DefaultPropertyWalkerTest extends AbstractProjectBuilderSpec {
     }
 
     private visitProperties(TaskInternal task) {
-        new DefaultPropertyWalker(new DefaultTypeMetadataStore(services.getAll(PropertyAnnotationHandler), [] as Set, [] as List, new TestCrossBuildInMemoryCacheFactory())).visitProperties(task, validationContext, visitor)
+        def cacheFactory = new TestCrossBuildInMemoryCacheFactory()
+        def typeAnnotationMetadataStore = new DefaultTypeAnnotationMetadataStore(
+            [],
+            ModifierAnnotationCategory.asMap(PROPERTY_TYPE_ANNOTATIONS),
+            ["java", "groovy"],
+            [],
+            [Object, GroovyObject],
+            [ConfigurableFileCollection, Property],
+            IGNORED_METHOD_ANNOTATIONS,
+            { false },
+            cacheFactory
+        )
+        def typeMetadataStore = new DefaultTypeMetadataStore([], services.getAll(PropertyAnnotationHandler), [], typeAnnotationMetadataStore, cacheFactory)
+        new DefaultPropertyWalker(typeMetadataStore).visitProperties(task, validationContext, visitor)
     }
 }

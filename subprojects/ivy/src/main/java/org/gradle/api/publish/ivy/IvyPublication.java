@@ -17,8 +17,10 @@
 package org.gradle.api.publish.ivy;
 
 import org.gradle.api.Action;
+import org.gradle.api.Incubating;
 import org.gradle.api.component.SoftwareComponent;
 import org.gradle.api.publish.Publication;
+import org.gradle.api.publish.VersionMappingStrategy;
 import org.gradle.internal.HasInternalProtocol;
 
 /**
@@ -331,4 +333,53 @@ public interface IvyPublication extends Publication {
      */
     void setRevision(String revision);
 
+    /**
+     * Configures the version mapping strategy.
+     *
+     * For example, to use resolved versions for runtime dependencies:
+     * <pre class='autoTested'>
+     * apply plugin: "java"
+     * apply plugin: "ivy-publish"
+     *
+     * publishing {
+     *   publications {
+     *     maven(IvyPublication) {
+     *       from components.java
+     *       versionMapping {
+     *         usage('java-runtime'){
+     *           fromResolutionResult()
+     *         }
+     *       }
+     *     }
+     *   }
+     * }
+     * </pre>
+     *
+     * @param configureAction the configuration
+     *
+     * @since 5.4
+     */
+    void versionMapping(Action<? super VersionMappingStrategy> configureAction);
+
+    /**
+     * Silences the compatibility warnings for the Ivy publication for the specified variant.
+     *
+     * Warnings are emitted when Gradle features are used that cannot be mapped completely to Ivy xml.
+     *
+     * @param variantName the variant to silence warning for
+     *
+     * @since 6.0
+     */
+    @Incubating
+    void suppressIvyMetadataWarningsFor(String variantName);
+
+    /**
+     * Silences all the compatibility warnings for the Ivy publication.
+     *
+     * Warnings are emitted when Gradle features are used that cannot be mapped completely to Ivy xml.
+     *
+     * @since 6.0
+     */
+    @Incubating
+    void suppressAllIvyMetadataWarnings();
 }

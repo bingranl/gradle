@@ -93,9 +93,11 @@ class AttributeConfigurationSelectorTest extends Specification {
   - api2
 All of them match the consumer attributes:
   - Variant 'api1' capability org:lib:1.0:
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
   - Variant 'api2' capability org:lib:1.0:
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.''')
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.''')
     }
 
     def "fails to select a variant when there no matching candidates"() {
@@ -115,9 +117,11 @@ All of them match the consumer attributes:
         NoMatchingConfigurationSelectionException e = thrown()
         failsWith(e, '''Unable to find a matching variant of org:lib:1.0:
   - Variant 'api' capability org:lib:1.0:
-      - Required org.gradle.usage 'cplusplus-headers' and found incompatible value 'java-api'.
+      - Incompatible attribute:
+          - Required org.gradle.usage 'cplusplus-headers' and found incompatible value 'java-api'.
   - Variant 'runtime' capability org:lib:1.0:
-      - Required org.gradle.usage 'cplusplus-headers' and found incompatible value 'java-runtime'.''')
+      - Incompatible attribute:
+          - Required org.gradle.usage 'cplusplus-headers' and found incompatible value 'java-runtime'.''')
     }
 
     @Unroll
@@ -197,11 +201,14 @@ All of them match the consumer attributes:
   - api3
 All of them match the consumer attributes:
   - Variant 'api1' capability org:lib:1.0:
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
   - Variant 'api2' capability org:lib:1.0:
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
   - Variant 'api3' capabilities org:lib:1.0 and org:second:1.0:
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.''')
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.''')
     }
 
     def "should select the variant which matches the most attributes"() {
@@ -241,11 +248,13 @@ All of them match the consumer attributes:
   - second
 All of them match the consumer attributes:
   - Variant 'first' capability org:lib:1.0:
-      - Found extra 'v1' but wasn't required.
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
+      - Unmatched attribute: Found extra 'v1' but wasn't required.
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
   - Variant 'second' capability org:lib:1.0:
-      - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.
-      - Found other 'true' but wasn't required.''')
+      - Unmatched attribute: Found other 'true' but wasn't required.
+      - Compatible attribute:
+          - Required org.gradle.usage 'java-api' and found compatible value 'java-api'.''')
 
     }
 
@@ -292,12 +301,8 @@ All of them match the consumer attributes:
         def variant2 = variant("second", ImmutableAttributes.EMPTY)
 
         given:
-        variant1.getArtifacts() >> [
-                artifact('foo', null)
-        ]
-        variant2.getArtifacts() >> [
-                artifact('foo', 'classy')
-        ]
+        variant1.getArtifacts() >> ImmutableList.of(artifact('foo', null))
+        variant2.getArtifacts() >> ImmutableList.of(artifact('foo', 'classy'))
         component(variant1, variant2)
 
         and:
@@ -308,6 +313,28 @@ All of them match the consumer attributes:
 
         then:
         selected.name == 'second'
+    }
+
+    def "should select the variant with the most exact match in case of ambiguity between attributes and capabilities"() {
+        given:
+        attributesSchema.attribute(Attribute.of('other', String)) {
+            it.compatibilityRules.add(AllCompatibilityRule)
+        }
+        component(
+            variant('A', attributes('org.gradle.usage': 'java-api', 'other': 'a'), capability('first'), capability('second')),
+            variant('B', attributes('org.gradle.usage': 'java-api', 'other': 'b'), capability('first')),
+            variant('C', attributes('org.gradle.usage': 'java-api'), capability('first'))
+        )
+
+        and:
+        consumerAttributes('org.gradle.usage': 'java-api', 'other': 'c')
+        requestCapability capability('first')
+
+        when:
+        performSelection()
+
+        then:
+        selected.name == 'B' // B matches best: capabilities match exactly, attribute 'other' was requested and a compatible value is provided (variant C does not provide any value for 'other')
     }
 
     private void performSelection() {
@@ -396,6 +423,14 @@ All of them match the consumer attributes:
             if (details.consumerValue == 'java-api' && details.producerValue == 'java-runtime') {
                 details.compatible()
             }
+        }
+    }
+
+    private static class AllCompatibilityRule implements AttributeCompatibilityRule<String> {
+
+        @Override
+        void execute(CompatibilityCheckDetails<String> details) {
+            details.compatible()
         }
     }
 }

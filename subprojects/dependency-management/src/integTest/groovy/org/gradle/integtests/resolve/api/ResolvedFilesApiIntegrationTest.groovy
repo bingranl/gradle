@@ -17,7 +17,6 @@
 package org.gradle.integtests.resolve.api
 
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
-import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
 import spock.lang.Unroll
 
 class ResolvedFilesApiIntegrationTest extends AbstractHttpDependencyResolutionTest {
@@ -40,7 +39,6 @@ allprojects {
     }
 }
 """
-        new ResolveTestFixture(buildFile).addDefaultVariantDerivationStrategy()
     }
 
     def "result includes files from local and external components and file dependencies in a fixed order"() {
@@ -296,13 +294,17 @@ task show {
         fails("show")
         failure.assertHasCause("""More than one variant of project :a matches the consumer attributes:
   - Configuration ':a:compile' variant free:
-      - Found artifactType 'jar' but wasn't required.
-      - Found flavor 'free' but wasn't required.
-      - Required usage 'compile' and found compatible value 'compile'.
+      - Unmatched attributes:
+          - Found artifactType 'jar' but wasn't required.
+          - Found flavor 'free' but wasn't required.
+      - Compatible attribute:
+          - Required usage 'compile' and found compatible value 'compile'.
   - Configuration ':a:compile' variant paid:
-      - Found artifactType 'jar' but wasn't required.
-      - Found flavor 'paid' but wasn't required.
-      - Required usage 'compile' and found compatible value 'compile'.""")
+      - Unmatched attributes:
+          - Found artifactType 'jar' but wasn't required.
+          - Found flavor 'paid' but wasn't required.
+      - Compatible attribute:
+          - Required usage 'compile' and found compatible value 'compile'.""")
 
         where:
         expression                                                                                         | _
@@ -367,25 +369,34 @@ task show {
         fails("show")
         failure.assertHasCause("""No variants of project :a match the consumer attributes:
   - Configuration ':a:compile' variant free:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Required flavor 'preview' and found incompatible value 'free'.
-      - Required usage 'compile' and found compatible value 'compile'.
+      - Incompatible attributes:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+          - Required flavor 'preview' and found incompatible value 'free'.
+      - Other attribute:
+          - Required usage 'compile' and found compatible value 'compile'.
   - Configuration ':a:compile' variant paid:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Required flavor 'preview' and found incompatible value 'paid'.
-      - Required usage 'compile' and found compatible value 'compile'.""")
+      - Incompatible attributes:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+          - Required flavor 'preview' and found incompatible value 'paid'.
+      - Other attribute:
+          - Required usage 'compile' and found compatible value 'compile'.""")
 
         failure.assertHasCause("""No variants of test:test:1.2 match the consumer attributes:
-  - test:test:1.2 configuration runtime:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Required flavor 'preview' but no value provided.
-      - Required usage 'compile' but no value provided.""")
+  - test:test:1.2 configuration default:
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attributes:
+          - Required flavor 'preview' but no value provided.
+          - Found org.gradle.status 'release' but wasn't required.
+          - Required usage 'compile' but no value provided.""")
 
         failure.assertHasCause("""No variants of things.jar match the consumer attributes:
   - things.jar:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Required flavor 'preview' but no value provided.
-      - Required usage 'compile' but no value provided.""")
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attributes:
+          - Required flavor 'preview' but no value provided.
+          - Required usage 'compile' but no value provided.""")
 
         where:
         expression                                                                                         | _
@@ -421,7 +432,6 @@ task show {
 
         given:
         mavenHttpRepo.getModuleMetaData('org', 'test').expectGetMissing()
-        mavenHttpRepo.directory('org', 'test').expectGetMissing()
         def m = mavenHttpRepo.module('org', 'test2', '2.0').publish()
         m.pom.expectGetBroken()
 
@@ -478,7 +488,7 @@ task show {
 
         then:
         failure.assertHasCause("Could not resolve all files for configuration ':compile'.")
-        failure.assertHasCause("Could not find test.jar (org:test:1.0).")
+        failure.assertHasCause("Could not find test-1.0.jar (org:test:1.0).")
 
         where:
         expression                                                                                         | _
@@ -571,8 +581,8 @@ task show {
 
         then:
         failure.assertHasCause("Could not resolve all files for configuration ':compile'.")
-        failure.assertHasCause("Could not find test.jar (org:test:1.0).")
-        failure.assertHasCause("Could not download test2.jar (org:test2:2.0)")
+        failure.assertHasCause("Could not find test-1.0.jar (org:test:1.0).")
+        failure.assertHasCause("Could not download test2-2.0.jar (org:test2:2.0)")
         failure.assertHasCause("broken 1")
         failure.assertHasCause("broken 2")
         failure.assertHasCause("More than one variant of project :a matches the consumer attributes")

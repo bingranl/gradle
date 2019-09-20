@@ -19,12 +19,14 @@ package org.gradle.api.internal.artifacts.transform;
 import com.google.common.collect.ImmutableList;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.artifacts.transform.ArtifactTransform;
+import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.FileNormalizer;
-import org.gradle.internal.classloader.ClassLoaderHierarchyHasher;
 import org.gradle.internal.fingerprint.AbsolutePathInputNormalizer;
 import org.gradle.internal.fingerprint.FileCollectionFingerprinterRegistry;
+import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
@@ -38,6 +40,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.util.List;
 
+@SuppressWarnings("deprecation")
 public class LegacyTransformer extends AbstractTransformer<ArtifactTransform> {
 
     private final Instantiator instantiator;
@@ -51,6 +54,14 @@ public class LegacyTransformer extends AbstractTransformer<ArtifactTransform> {
         this.secondaryInputsHash = hashSecondaryInputs(isolatableParameters, implementationClass, classLoaderHierarchyHasher);
     }
 
+    public LegacyTransformer(Class<? extends ArtifactTransform> implementationClass, Isolatable<Object[]> isolatableParameters, HashCode secondaryInputsHash, InstantiationScheme actionInstantiationScheme, ImmutableAttributes fromAttributes) {
+        super(implementationClass, fromAttributes);
+        this.instantiator = actionInstantiationScheme.instantiator();
+        this.secondaryInputsHash = secondaryInputsHash;
+        this.isolatableParameters = isolatableParameters;
+    }
+
+    @Override
     public boolean requiresDependencies() {
         return false;
     }
@@ -65,8 +76,17 @@ public class LegacyTransformer extends AbstractTransformer<ArtifactTransform> {
         return false;
     }
 
+    public HashCode getSecondaryInputsHash() {
+        return secondaryInputsHash;
+    }
+
+    public Isolatable<Object[]> getIsolatableParameters() {
+        return isolatableParameters;
+    }
+
     @Override
-    public ImmutableList<File> transform(File inputArtifact, File outputDir, ArtifactTransformDependencies dependencies, @Nullable InputChanges inputChanges) {
+    public ImmutableList<File> transform(Provider<FileSystemLocation> inputArtifactProvider, File outputDir, ArtifactTransformDependencies dependencies, @Nullable InputChanges inputChanges) {
+        File inputArtifact = inputArtifactProvider.get().getAsFile();
         ArtifactTransform transformer = newTransformer();
         transformer.setOutputDirectory(outputDir);
         List<File> outputs = transformer.transform(inputArtifact);
@@ -81,7 +101,7 @@ public class LegacyTransformer extends AbstractTransformer<ArtifactTransform> {
         String inputFilePrefix = inputArtifact.getPath() + File.separator;
         String outputDirPrefix = outputDir.getPath() + File.separator;
         for (File output : outputs) {
-            TransformOutputsInternal.validateOutputExists(output);
+            TransformOutputsInternal.validateOutputExists(outputDirPrefix, output);
             TransformOutputsInternal.determineOutputLocationType(output, inputArtifact, inputFilePrefix, outputDir, outputDirPrefix);
         }
     }

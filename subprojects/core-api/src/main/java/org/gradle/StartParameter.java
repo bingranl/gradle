@@ -34,8 +34,6 @@ import org.gradle.initialization.UserHomeInitScriptFinder;
 import org.gradle.internal.DefaultTaskExecutionRequest;
 import org.gradle.internal.FileUtils;
 import org.gradle.internal.concurrent.DefaultParallelismConfiguration;
-import org.gradle.internal.installation.CurrentGradleInstallation;
-import org.gradle.internal.installation.GradleInstallation;
 import org.gradle.internal.logging.DefaultLoggingConfiguration;
 import org.gradle.util.DeprecationLogger;
 
@@ -69,20 +67,20 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
 
     private final DefaultLoggingConfiguration loggingConfiguration = new DefaultLoggingConfiguration();
     private final DefaultParallelismConfiguration parallelismConfiguration = new DefaultParallelismConfiguration();
-    private List<TaskExecutionRequest> taskRequests = new ArrayList<TaskExecutionRequest>();
-    private Set<String> excludedTaskNames = new LinkedHashSet<String>();
+    private List<TaskExecutionRequest> taskRequests = new ArrayList<>();
+    private Set<String> excludedTaskNames = new LinkedHashSet<>();
     private boolean buildProjectDependencies = true;
     private File currentDir;
     private File projectDir;
     private boolean searchUpwards;
-    private Map<String, String> projectProperties = new HashMap<String, String>();
-    private Map<String, String> systemPropertiesArgs = new HashMap<String, String>();
+    private Map<String, String> projectProperties = new HashMap<>();
+    private Map<String, String> systemPropertiesArgs = new HashMap<>();
     private File gradleUserHomeDir;
     protected File gradleHomeDir;
     private File settingsFile;
     private boolean useEmptySettings;
     private File buildFile;
-    private List<File> initScripts = new ArrayList<File>();
+    private List<File> initScripts = new ArrayList<>();
     private boolean dryRun;
     private boolean rerunTasks;
     private boolean profile;
@@ -90,15 +88,13 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     private boolean offline;
     private File projectCacheDir;
     private boolean refreshDependencies;
-    private boolean recompileScripts;
     private boolean buildCacheEnabled;
     private boolean buildCacheDebugLogging;
     private boolean configureOnDemand;
     private boolean continuous;
-    private List<File> includedBuilds = new ArrayList<File>();
+    private List<File> includedBuilds = new ArrayList<>();
     private boolean buildScan;
     private boolean noBuildScan;
-    private boolean interactive;
     private boolean writeDependencyLocks;
     private List<String> lockedDependenciesToUpdate = emptyList();
 
@@ -187,14 +183,8 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * Creates a {@code StartParameter} with default values. This is roughly equivalent to running Gradle on the command-line with no arguments.
      */
     public StartParameter() {
-        GradleInstallation gradleInstallation = CurrentGradleInstallation.get();
-        if (gradleInstallation == null) {
-            gradleHomeDir = null;
-        } else {
-            gradleHomeDir = gradleInstallation.getGradleHome();
-        }
-
         BuildLayoutParameters layoutParameters = new BuildLayoutParameters();
+        gradleHomeDir = layoutParameters.getGradleInstallationHomeDir();
         searchUpwards = layoutParameters.getSearchUpwards();
         currentDir = layoutParameters.getCurrentDir();
         projectDir = layoutParameters.getProjectDir();
@@ -217,15 +207,15 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         p.projectDir = projectDir;
         p.settingsFile = settingsFile;
         p.useEmptySettings = useEmptySettings;
-        p.taskRequests = new ArrayList<TaskExecutionRequest>(taskRequests);
-        p.excludedTaskNames = new LinkedHashSet<String>(excludedTaskNames);
+        p.taskRequests = new ArrayList<>(taskRequests);
+        p.excludedTaskNames = new LinkedHashSet<>(excludedTaskNames);
         p.buildProjectDependencies = buildProjectDependencies;
         p.currentDir = currentDir;
         p.searchUpwards = searchUpwards;
-        p.projectProperties = new HashMap<String, String>(projectProperties);
-        p.systemPropertiesArgs = new HashMap<String, String>(systemPropertiesArgs);
-        p.initScripts = new ArrayList<File>(initScripts);
-        p.includedBuilds = new ArrayList<File>(includedBuilds);
+        p.projectProperties = new HashMap<>(projectProperties);
+        p.systemPropertiesArgs = new HashMap<>(systemPropertiesArgs);
+        p.initScripts = new ArrayList<>(initScripts);
+        p.includedBuilds = new ArrayList<>(includedBuilds);
         p.dryRun = dryRun;
         p.projectCacheDir = projectCacheDir;
         return p;
@@ -252,16 +242,14 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         p.continueOnFailure = continueOnFailure;
         p.offline = offline;
         p.rerunTasks = rerunTasks;
-        p.recompileScripts = recompileScripts;
         p.refreshDependencies = refreshDependencies;
         p.setParallelProjectExecutionEnabled(isParallelProjectExecutionEnabled());
         p.buildCacheEnabled = buildCacheEnabled;
         p.configureOnDemand = configureOnDemand;
         p.setMaxWorkerCount(getMaxWorkerCount());
-        p.systemPropertiesArgs = new HashMap<String, String>(systemPropertiesArgs);
-        p.interactive = interactive;
+        p.systemPropertiesArgs = new HashMap<>(systemPropertiesArgs);
         p.writeDependencyLocks = writeDependencyLocks;
-        p.lockedDependenciesToUpdate = new ArrayList<String>(lockedDependenciesToUpdate);
+        p.lockedDependenciesToUpdate = new ArrayList<>(lockedDependenciesToUpdate);
         return p;
     }
 
@@ -308,6 +296,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @return this
      */
     public StartParameter useEmptySettings() {
+        DeprecationLogger.nagUserOfDeprecated("StartParameter#useEmptySettings()");
         searchUpwards = false;
         useEmptySettings = true;
         settingsFile = null;
@@ -320,6 +309,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      * @return Whether to use empty settings or not.
      */
     public boolean isUseEmptySettings() {
+        DeprecationLogger.nagUserOfDeprecated("StartParameter#isUseEmptySettings()");
         return useEmptySettings;
     }
 
@@ -346,7 +336,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
         if (taskNames == null) {
             this.taskRequests = emptyList();
         } else {
-            this.taskRequests = Arrays.<TaskExecutionRequest>asList(new DefaultTaskExecutionRequest(taskNames));
+            this.taskRequests = Arrays.asList(new DefaultTaskExecutionRequest(taskNames));
         }
     }
 
@@ -410,10 +400,12 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     }
 
     public boolean isSearchUpwards() {
+        DeprecationLogger.nagUserOfDeprecated("StartParameter#isSearchUpwards()");
         return searchUpwards;
     }
 
     public void setSearchUpwards(boolean searchUpwards) {
+        DeprecationLogger.nagUserOfDeprecated("StartParameter#setSearchUpwards(boolean)");
         this.searchUpwards = searchUpwards;
     }
 
@@ -542,7 +534,7 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
             new UserHomeInitScriptFinder(getGradleUserHomeDir()), new DistributionInitScriptFinder(gradleHomeDir)
         );
 
-        List<File> scripts = new ArrayList<File>(getInitScripts());
+        List<File> scripts = new ArrayList<>(getInitScripts());
         initScriptFinder.findScripts(scripts);
         return Collections.unmodifiableList(scripts);
     }
@@ -648,28 +640,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     }
 
     /**
-     * Specifies whether to force the build scripts to be recompiled.
-     *
-     * @deprecated This flag is no longer used.
-     */
-    @Deprecated
-    public boolean isRecompileScripts() {
-        DeprecationLogger.nagUserOfDiscontinuedMethod("StartParameter.isRecompileScripts()");
-        return recompileScripts;
-    }
-
-    /**
-     * Specifies whether to force the build scripts to be recompiled.
-     *
-     * @deprecated This flag is no longer used and simply defaults to 'false'.
-     */
-    @Deprecated
-    public void setRecompileScripts(boolean recompileScripts) {
-        DeprecationLogger.nagUserOfDiscontinuedMethod("StartParameter.setRecompileScripts()");
-        this.recompileScripts = recompileScripts;
-    }
-
-    /**
      * {@inheritDoc}
      */
     @Override
@@ -708,7 +678,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 4.6
      */
-    @Incubating
     public boolean isBuildCacheDebugLogging() {
         return buildCacheDebugLogging;
     }
@@ -718,7 +687,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 4.6
      */
-    @Incubating
     public void setBuildCacheDebugLogging(boolean buildCacheDebugLogging) {
         this.buildCacheDebugLogging = buildCacheDebugLogging;
     }
@@ -764,14 +732,12 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
             + ", initScripts=" + initScripts
             + ", dryRun=" + dryRun
             + ", rerunTasks=" + rerunTasks
-            + ", recompileScripts=" + recompileScripts
             + ", offline=" + offline
             + ", refreshDependencies=" + refreshDependencies
             + ", parallelProjectExecution=" + isParallelProjectExecutionEnabled()
             + ", configureOnDemand=" + configureOnDemand
             + ", maxWorkerCount=" + getMaxWorkerCount()
             + ", buildCacheEnabled=" + buildCacheEnabled
-            + ", interactive=" + interactive
             + ", writeDependencyLocks=" + writeDependencyLocks
             + '}';
     }
@@ -845,35 +811,10 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
     }
 
     /**
-     * Returns true when console is interactive.
-     *
-     * @since 4.3
-     * @deprecated This flag is no longer used and simply defaults to 'false'.
-     */
-    @Deprecated
-    public boolean isInteractive() {
-        DeprecationLogger.nagUserOfDiscontinuedMethod("StartParameter.isInteractive()");
-        return interactive;
-    }
-
-    /**
-     * Specifies whether console is interactive.
-     *
-     * @since 4.3
-     * @deprecated This flag is no longer used.
-     */
-    @Deprecated
-    public void setInteractive(boolean interactive) {
-        DeprecationLogger.nagUserOfDiscontinuedMethod("StartParameter.setInteractive()");
-        this.interactive = interactive;
-    }
-
-    /**
      * Specifies whether dependency resolution needs to be persisted for locking
      *
      * @since 4.8
      */
-    @Incubating
     public void setWriteDependencyLocks(boolean writeDependencyLocks) {
         this.writeDependencyLocks = writeDependencyLocks;
     }
@@ -883,7 +824,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 4.8
      */
-    @Incubating
     public boolean isWriteDependencyLocks() {
         return writeDependencyLocks;
     }
@@ -897,7 +837,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 4.8
      */
-    @Incubating
     public void setLockedDependenciesToUpdate(List<String> lockedDependenciesToUpdate) {
         this.lockedDependenciesToUpdate = Lists.newArrayList(lockedDependenciesToUpdate);
         this.writeDependencyLocks = true;
@@ -910,7 +849,6 @@ public class StartParameter implements LoggingConfiguration, ParallelismConfigur
      *
      * @since 4.8
      */
-    @Incubating
     public List<String> getLockedDependenciesToUpdate() {
         return lockedDependenciesToUpdate;
     }

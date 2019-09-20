@@ -140,7 +140,7 @@ allprojects {
                             }
                         }
                         assert defaultView.files.collect { it.name } == ['lib.jar', 'lib-util.jar', 'ui.jar', 'some-jar-1.0.jar']
-                        assert defaultView.artifacts.collect { it.id.displayName }  == ['lib.jar (project :lib)', 'lib-util.jar', 'ui.jar (project :ui)', 'some-jar.jar (org:test:1.0)']
+                        assert defaultView.artifacts.collect { it.id.displayName }  == ['lib.jar (project :lib)', 'lib-util.jar', 'ui.jar (project :ui)', 'some-jar-1.0.jar (org:test:1.0)']
 
                         // Get a view with additional optional attribute
                         def optionalAttributeView =  configurations.compile.incoming.artifactView {
@@ -150,7 +150,7 @@ allprojects {
                             }
                         }
                         assert optionalAttributeView.files.collect { it.name } == ['lib.jar', 'lib-util.jar', 'ui.jar', 'some-jar-1.0.jar']
-                        assert optionalAttributeView.artifacts.collect { it.id.displayName }  == ['lib.jar (project :lib)', 'lib-util.jar', 'ui.jar (project :ui)', 'some-jar.jar (org:test:1.0)']
+                        assert optionalAttributeView.artifacts.collect { it.id.displayName }  == ['lib.jar (project :lib)', 'lib-util.jar', 'ui.jar (project :ui)', 'some-jar-1.0.jar (org:test:1.0)']
                     }
                 }
             }
@@ -226,7 +226,7 @@ allprojects {
                     inputs.files view.files
                     doLast {
                         assert view.files.collect { it.name } == ['lib.classes', 'lib-util.classes', 'ui.classes', 'some-classes-1.0.classes']
-                        assert view.artifacts.collect { it.id.displayName } == ['lib.classes (project :lib)', 'lib-util.classes', 'ui.classes (project :ui)', 'some-classes.classes (org:test2:1.0)']
+                        assert view.artifacts.collect { it.id.displayName } == ['lib.classes (project :lib)', 'lib-util.classes', 'ui.classes (project :ui)', 'some-classes-1.0.classes (org:test2:1.0)']
                     }
                 }
             }
@@ -520,12 +520,15 @@ task show {
         def m1 = ivyHttpRepo.module("org", "test", "1.0").publish()
 
         buildFile << """
+import org.gradle.api.artifacts.transform.TransformParameters
 
-class VariantArtifactTransform extends ArtifactTransform {
-    List<File> transform(File input) {
-        def output = new File(outputDirectory, "transformed-" + input.name)
+abstract class VariantArtifactTransform implements TransformAction<TransformParameters.None> {
+    @InputArtifact
+    abstract Provider<FileSystemLocation> getInputArtifact()
+
+    void transform(TransformOutputs outputs) {
+        def output = outputs.file("transformed-" + inputArtifact.get().asFile.name)
         output << "transformed"
-        return [output]         
     }
 }
 
@@ -534,10 +537,9 @@ dependencies {
     compile project(':lib')
     compile project(':ui')
     compile 'org:test:1.0'
-    registerTransform {
+    registerTransform(VariantArtifactTransform) {
         from.attribute(usage, "api")
         to.attribute(usage, "transformed")
-        artifactTransform(VariantArtifactTransform)
     }
 }
 
@@ -763,17 +765,23 @@ task show {
         failure.assertHasCause("Could not resolve all task dependencies for configuration ':app:compile'.")
         failure.assertHasCause("""More than one variant of project :lib matches the consumer attributes:
   - Configuration ':lib:compile':
-      - Required artifactType 'jar' and found compatible value 'jar'.
-      - Found buildType 'n/a' but wasn't required.
-      - Required usage 'api' and found compatible value 'api'.
+      - Unmatched attribute:
+          - Found buildType 'n/a' but wasn't required.
+      - Compatible attributes:
+          - Required artifactType 'jar' and found compatible value 'jar'.
+          - Required usage 'api' and found compatible value 'api'.
   - Configuration ':lib:compile' variant debug:
-      - Required artifactType 'jar' and found compatible value 'jar'.
-      - Found buildType 'debug' but wasn't required.
-      - Required usage 'api' and found compatible value 'api'.
+      - Unmatched attribute:
+          - Found buildType 'debug' but wasn't required.
+      - Compatible attributes:
+          - Required artifactType 'jar' and found compatible value 'jar'.
+          - Required usage 'api' and found compatible value 'api'.
   - Configuration ':lib:compile' variant release:
-      - Required artifactType 'jar' and found compatible value 'jar'.
-      - Found buildType 'release' but wasn't required.
-      - Required usage 'api' and found compatible value 'api'.""")
+      - Unmatched attribute:
+          - Found buildType 'release' but wasn't required.
+      - Compatible attributes:
+          - Required artifactType 'jar' and found compatible value 'jar'.
+          - Required usage 'api' and found compatible value 'api'.""")
     }
 
     def "returns empty result when no variants match and view attributes specified"() {
@@ -876,27 +884,36 @@ task show {
 
         failure.assertHasCause("""No variants of project :lib match the consumer attributes:
   - Configuration ':lib:compile':
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Required usage 'api' and found compatible value 'api'.
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attribute:
+          - Required usage 'api' and found compatible value 'api'.
   - Configuration ':lib:compile' variant debug:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Found buildType 'debug' but wasn't required.
-      - Required usage 'api' and found compatible value 'api'.
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attributes:
+          - Found buildType 'debug' but wasn't required.
+          - Required usage 'api' and found compatible value 'api'.
   - Configuration ':lib:compile' variant release:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Found buildType 'release' but wasn't required.
-      - Required usage 'api' and found compatible value 'api'.""")
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attributes:
+          - Found buildType 'release' but wasn't required.
+          - Required usage 'api' and found compatible value 'api'.""")
 
         failure.assertHasCause("""No variants of test:test:1.2 match the consumer attributes:
   - test:test:1.2 configuration default:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Found org.gradle.status 'integration' but wasn't required.
-      - Required usage 'api' but no value provided.""")
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attributes:
+          - Found org.gradle.status 'integration' but wasn't required.
+          - Required usage 'api' but no value provided.""")
 
         failure.assertHasCause("""No variants of thing.jar match the consumer attributes:
   - thing.jar:
-      - Required artifactType 'dll' and found incompatible value 'jar'.
-      - Required usage 'api' but no value provided.""")
+      - Incompatible attribute:
+          - Required artifactType 'dll' and found incompatible value 'jar'.
+      - Other attribute: Required usage 'api' but no value provided.""")
 
     }
 

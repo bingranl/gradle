@@ -27,6 +27,7 @@ import org.gradle.api.UncheckedIOException;
 import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.hash.Hashing;
 import org.gradle.internal.hash.HashingOutputStream;
+import org.gradle.internal.io.NullOutputStream;
 import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 import org.gradle.internal.nativeintegration.services.NativeServices;
 import org.gradle.testing.internal.util.RetryUtil;
@@ -180,6 +181,7 @@ public class TestFile extends File {
         }
     }
 
+    @Override
     public TestFile[] listFiles() {
         File[] children = super.listFiles();
         if (children == null) {
@@ -476,13 +478,39 @@ public class TestFile extends File {
         return hashingStream.hash();
     }
 
-    public void createLink(File target) {
-        createLink(target.getAbsolutePath());
+    public String getSha256Hash() {
+        // Sha256 is not part of core-services (i.e. no Hashing.sha256() available), hence we use plain Guava classes here.
+        com.google.common.hash.HashingOutputStream hashingStream =
+            new com.google.common.hash.HashingOutputStream(com.google.common.hash.Hashing.sha256(), NullOutputStream.INSTANCE);
+        try {
+            Files.copy(this.toPath(), hashingStream);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return hashingStream.hash().toString();
     }
 
-    public void createLink(String target) {
-        NativeServices.getInstance().get(FileSystem.class).createSymbolicLink(this, new File(target));
+    public TestFile createLink(String target) {
+        return createLink(new File(target));
+    }
+
+    public TestFile createLink(File target) {
+        NativeServices.getInstance().get(FileSystem.class)
+            .createSymbolicLink(this, target);
         clearCanonCaches();
+        return this;
+    }
+
+    public TestFile createNamedPipe() {
+        try {
+            Process mkfifo = new ProcessBuilder("mkfifo", getAbsolutePath())
+                .redirectErrorStream(true)
+                .start();
+            assert mkfifo.waitFor() == 0; // assert the exit value signals success
+            return this;
+        } catch (IOException | InterruptedException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private void clearCanonCaches() {
@@ -692,6 +720,18 @@ public class TestFile extends File {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        return this;
+    }
+
+    public TestFile makeUnreadable() {
+        setReadable(false, false);
+        assert !Files.isReadable(toPath());
+        return this;
+    }
+
+    public TestFile makeReadable() {
+        setReadable(true, false);
+        assert Files.isReadable(toPath());
         return this;
     }
 

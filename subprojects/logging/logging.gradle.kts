@@ -9,11 +9,11 @@ plugins {
 }
 
 dependencies {
-    api(project(":baseServices"))
-    api(project(":messaging"))
-    api(project(":cli"))
-    api(project(":buildOption"))
-    api(library("slf4j_api"))
+    implementation(project(":baseServices"))
+    implementation(project(":messaging"))
+    implementation(project(":cli"))
+    implementation(project(":buildOption"))
+    implementation(library("slf4j_api"))
 
     implementation(project(":native"))
     implementation(library("jul_to_slf4j"))
@@ -21,22 +21,25 @@ dependencies {
     implementation(library("commons_lang"))
     implementation(library("guava"))
     implementation(library("jansi"))
-    implementation(library("jcip"))
 
     runtimeOnly(library("log4j_to_slf4j"))
     runtimeOnly(library("jcl_to_slf4j"))
 
-    testImplementation(project(":internalTesting"))
+    testImplementation(testFixtures(project(":core")))
+    
+    integTestImplementation(library("ansi_control_sequence_util"))
 
     integTestRuntimeOnly(project(":apiMetadata"))
+    integTestRuntimeOnly(project(":runtimeApiInfo"))
+    integTestRuntimeOnly(project(":kotlinDslProviderPlugins"))
+    integTestRuntimeOnly(project(":testingJunitPlatform"))
+
+    testFixturesImplementation(project(":baseServices"))
+    testFixturesImplementation(library("slf4j_api"))
 }
 
 gradlebuildJava {
-    moduleType = ModuleType.ENTRY_POINT
-}
-
-testFixtures {
-    from(":core")
+    moduleType = ModuleType.WORKER
 }
 
 classycle {

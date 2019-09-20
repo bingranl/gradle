@@ -29,11 +29,13 @@ class DependencySpec {
     String strictVersion
     List<String> rejects
     List<ExcludeSpec> exclusions = []
+    boolean endorseStrictVersions
     String reason
-    Map<String, ?> attributes
+    Map<String, Object> attributes
     List<CapabilitySpec> requestedCapabilities = []
+    ArtifactSelectorSpec artifactSelector
 
-    DependencySpec(String g, String m, String v, String preferredVersion, String strictVersion, List<String> rejects, Collection<Map> excludes, String reason, Map<String, ?> attributes) {
+    DependencySpec(String g, String m, String v, String preferredVersion, String strictVersion, List<String> rejects, Collection<Map> excludes, Boolean endorseStrictVersions, String reason, Map<String, Object> attributes, ArtifactSelectorSpec artifactSelector) {
         group = g
         module = m
         version = v
@@ -47,8 +49,10 @@ class DependencySpec {
                 new ExcludeSpec(group, module)
             }
         }
+        this.endorseStrictVersions = endorseStrictVersions
         this.reason = reason
         this.attributes = attributes
+        this.artifactSelector = artifactSelector
     }
 
     DependencySpec attribute(String name, Object value) {
@@ -56,8 +60,13 @@ class DependencySpec {
         this
     }
 
+    DependencySpec exclude(String group, String module) {
+        exclusions << new ExcludeSpec(group, module)
+        this
+    }
+
     DependencySpec requestedCapability(String group, String name, String version) {
-        requestedCapabilities << new CapabilitySpec(group:group, name:name, version:version)
+        requestedCapabilities << new CapabilitySpec(group, name, version)
         this
     }
 }
